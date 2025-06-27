@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Emotion Assistant</title>
+</head>
+<body>
+    <h1>Emotion Analyzer</h1>
+    <form id="emotionForm">
+        <textarea name="text" rows="5" cols="40" placeholder="How are you feeling?"></textarea><br>
+        <button type="submit">Submit</button>
+    </form>
+    <pre id="result"></pre>
+
+    <script>
+        document.getElementById("emotionForm").addEventListener("submit", async function(e) {
+            e.preventDefault();
+            const text = document.querySelector("textarea").value;
+
+            const response = await fetch("/analyze", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text })
+            });
+
+            const data = await response.json();
+            document.getElementById("result").textContent = JSON.stringify(data, null, 2);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+# LangGraph core
+langgraph>=0.0.20
+langchain>=0.1.16
+
+# Gemini 2.0 Flash via Vertex AI
+google-cloud-aiplatform>=1.48.0
+google-generativeai>=0.5.1  # For Gemini API
+
+# Vector Store (FAISS)
+faiss-cpu>=1.7.4
+langchain-community>=0.0.36  # For FAISS integration
+sentence-transformers>=2.2.2  # Optional for embedding support
+
+# Embeddings
+transformers>=4.40.0
+torch>=2.2.0
+
+# Web backend
+flask>=2.3.0
+
+# Optional: JSON/dotenv/logging
+python-dotenv>=1.0.1
+pandas>=2.2.2
+scikit-learn>=1.4.2
+matplotlib>=3.9.0  # For mood visualization, if needed
+
+# Development
+ipython
+notebook
