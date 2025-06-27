@@ -1,6 +1,10 @@
 # LangGraph core
 langgraph>=0.0.20
 langchain>=0.1.16
+langchain-community>=0.0.36
+langchain-core>=0.3.10
+langchain-openai>=0.2.1
+langchain-google-genai>=0.2.1
 
 # Gemini 2.0 Flash via Vertex AI
 google-cloud-aiplatform>=1.48.0
