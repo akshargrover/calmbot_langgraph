@@ -2,6 +2,9 @@ import faiss
 import os
 from langchain.vectorstores import FAISS
 from langchain.embeddings import GoogleGenerativeAIEmbeddings  # Or OpenAI
+from utils.embedding import get_text_embedding
+from utils.faiss_utils import load_faiss_index, save_faiss_index, add_embedding
+import numpy as np
 
 def fetch_user_history(state):
     emotion = state["emotions"]
@@ -12,3 +15,11 @@ def fetch_user_history(state):
     similar_moods = vectorstore.similarity_search(emotion, k=5)
     
     return {**state, "memory": similar_moods}
+
+def store_mood(state):
+    user_text = state["text"]
+    embedding = np.array(get_text_embedding(user_text))
+    index = load_faiss_index()
+    add_embedding(index, embedding)
+    save_faiss_index(index)
+    return state

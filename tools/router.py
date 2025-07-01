@@ -1,19 +1,19 @@
 from langgraph.graph import StateGraph, END
 from langgraph.router import Router
-from emotion_detector import detect_emotion
-from prompt_tailor import generate_prompt
-from self_care_recommender import suggest_care
-from mood_forecaster import forecast_mood
+from tools.emotion_detector import detect_emotion
+from tools.prompt_tailor import generate_prompt
+from tools.self_care_recommender import suggest_care
+from tools.mood_forecaster import forecast_mood
 from memory_store import fetch_user_history
 
 def emotion_router(state):
-    emotions = state["emotions"]
-    if "anxiety" in emotions.lower():
-        return "anxiety_flow"
-    elif "joy" in emotions.lower():
-        return "joy_flow"
+    emotion = state.get("emotions", "other").lower()
+    if emotion in ["anxiety", "fear", "shame"]:
+        return "support_flow"
+    elif emotion in ["joy", "gratitude", "surprise"]:
+        return "positive_flow"
     else:
-        return "generic_flow"
+        return "default_flow"
 
 def build_graph():
     graph = StateGraph()

@@ -21,6 +21,7 @@ torch>=2.2.0
 
 # Web backend
 flask>=2.3.0
+flask-cors
 
 # Optional: JSON/dotenv/logging
 python-dotenv>=1.0.1
@@ -31,3 +32,6 @@ matplotlib>=3.9.0  # For mood visualization, if needed
 # Development
 ipython
 notebook
+
+numpy
+pyyaml
