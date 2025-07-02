@@ -1,7 +1,5 @@
-import faiss
-import os
-from langchain.vectorstores import FAISS
-from langchain.embeddings import GoogleGenerativeAIEmbeddings  # Or OpenAI
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_community.vectorstores import FAISS
 from utils.embedding import get_text_embedding
 from utils.faiss_utils import load_faiss_index, save_faiss_index, add_embedding
 import numpy as np

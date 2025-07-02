@@ -16,7 +16,7 @@ def analyze():
     user_id = data.get("user_id", "default")
     text = data["text"]
     state = {"user_id": user_id, "text": text}
-    result = analyze_graph(state)
+    result = analyze_graph.invoke(state)
     response = AnalyzeResponse(
         emotions=result.get("emotions", ""),
         confidence=result.get("confidence", 0.0),

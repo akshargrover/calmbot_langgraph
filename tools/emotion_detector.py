@@ -14,7 +14,10 @@ def detect_emotion(state):
     response = llm.invoke(prompt)
     # Parse response (assume response.content is JSON)
     import json
-    result = json.loads(response.content)
+    try:
+        result = json.loads(response.content)
+    except json.JSONDecodeError:
+        result = {"emotion": "other", "confidence": 0.5, "details": "Could not parse emotion"}
     state.update({
         "emotions": result["emotion"],
         "confidence": result["confidence"],
