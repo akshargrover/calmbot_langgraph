@@ -1,36 +1,49 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>CalmBot - Mental Health Assistant</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 2em; background: #f7f7fa; }
-        #result { margin-top: 2em; padding: 1em; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #eee; }
-        textarea { width: 100%; height: 80px; }
-        button { padding: 0.5em 1.5em; font-size: 1em; }
-    </style>
+  <title>Emotion Assistant</title>
+  <style>
+    body { font-family: Arial; padding: 30px; }
+    .section { margin-top: 20px; padding: 10px; border: 1px solid #ddd; border-radius: 10px; }
+  </style>
 </head>
 <body>
-    <h1>CalmBot - Mental Health Assistant</h1>
-    <form id="analyzeForm">
-        <label for="text">How are you feeling today?</label><br>
-        <textarea id="text" name="text" required></textarea><br>
-        <button type="submit">Analyze</button>
-    </form>
-    <div id="result"></div>
-    <script>
-        document.getElementById('analyzeForm').onsubmit = async function(e) {
-            e.preventDefault();
-            const text = document.getElementById('text').value;
-            document.getElementById('result').innerHTML = 'Analyzing...';
-            const res = await fetch('/analyze', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text })
-            });
-            const data = await res.json();
-            document.getElementById('result').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-        };
-    </script>
+  <h1>Mental Health Assistant</h1>
+  <form action="/analyze" method="post">
+    <textarea name="user_input" rows="5" cols="60" placeholder="Share your thoughts..."></textarea><br><br>
+    <button type="submit">Analyze</button>
+  </form>
+
+  {% if emotion %}
+    <div class="section"><strong>Emotion Detected:</strong> {{ emotion }}</div>
+    <div class="section"><strong>Mood Forecast:</strong> {{ forecast }}</div>
+    <div class="section">
+      <strong>Recent Articles:</strong>
+      <ul>
+        {% for link in emotion_context_links %}
+          <li><a href="{{ link['url'] }}" target="_blank">{{ link['title'] }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="section"><strong>Web-based Self-Care:</strong> 
+      <ul>
+        {% for item in self_care_articles %}
+          <li><a href="{{ item['url'] }}" target="_blank">{{ item['title'] }}</a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="section"><strong>RAG Self-Care Suggestion:</strong> {{ rag_self_care }}</div>
+    <div class="section"><strong>Suggested Therapist:</strong> {{ therapist_match }}</div>
+    <div class="section"><strong>Prompt:</strong> {{ prompt }}</div>
+    <div class="section"><strong>Care Suggestion:</strong> {{ care_suggestion }}</div>
+    <div class="section"><strong>Appointment:</strong> {{ appointment_offer }} → {{ appointment_status }}</div>
+  {% endif %}
+  {% if crisis_response %}
+<div class="section" style="border: 2px solid red;">
+  <strong>🚨 Crisis Alert:</strong><br>
+  <pre>{{ crisis_response }}</pre>
+</div>
+{% endif %}
+
 </body>
 </html>

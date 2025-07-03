@@ -14,3 +14,4 @@ def tailor_prompt(state):
     tailored = base_prompt.get(emotion, base_prompt["other"])
     state["tailored_prompt"] = tailored
     return state
+
