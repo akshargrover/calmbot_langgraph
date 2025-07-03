@@ -87,6 +87,7 @@ def build_graph():
     graph.add_node("CrisisResponder", crisis_responder)
 
     # Set entry point
+    graph.set_entry_point("DetectEmotion")
     graph.add_edge("DetectEmotion", "AgentRouter")
 
     # Conditional: crisis or normal

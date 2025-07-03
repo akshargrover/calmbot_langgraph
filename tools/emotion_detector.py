@@ -3,7 +3,7 @@ from config.settings import get_gemini_api_key
 
 def detect_emotion(state):
     user_text = state["text"]
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=get_gemini_api_key())
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", google_api_key=get_gemini_api_key())
     prompt = (
         """
         Analyze the following text and identify the user's primary emotion. 

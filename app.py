@@ -12,7 +12,7 @@ def home():
 @app.route("/analyze", methods=["POST"])
 def analyze():
     user_input = request.form["user_input"]
-    input_state = {"input": user_input}
+    input_state = {"text": user_input}
 
     final_state = graph.invoke(input_state)
 
