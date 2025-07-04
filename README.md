@@ -1,4 +1,4 @@
-# calmbot_langgraph
+# Calmbot (Built using LangGraph)
 
 A conversational mental health assistant powered by LangGraph, LLMs, and Retrieval-Augmented Generation (RAG). The bot detects user emotions, provides self-care suggestions, matches users to therapists, and offers crisis support, all orchestrated through a modular graph-based workflow.
 
