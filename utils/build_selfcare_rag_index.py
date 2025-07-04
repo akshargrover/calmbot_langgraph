@@ -14,7 +14,7 @@ def build_selfcare_rag_index(pdf_folder="data/selfcare_pdfs", index_path="data/s
         for page in loader.load_and_split():
             docs.append(Document(page_content=page.page_content, metadata={"source": pdf}))
 
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, overlap=200)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_documents(docs)
 
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")

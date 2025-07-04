@@ -9,8 +9,11 @@ def fetch_user_history(state):
     emotion = state["emotions"]
     
     index_path = "data/faiss_index"
-    vectorstore = FAISS.load_local(index_path, GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=os.getenv("GEMINI_API_KEY")),allow_dangerous_deserialization=True, )
-    
+    vectorstore = FAISS.load_local(
+        "data/therapist_rag",
+        GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=os.getenv("GEMINI_API_KEY")),
+        allow_dangerous_deserialization=True
+    )
     similar_moods = vectorstore.similarity_search(emotion, k=5)
     
     return {**state, "memory": similar_moods}

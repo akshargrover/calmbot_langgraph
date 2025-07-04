@@ -37,7 +37,13 @@ def therapist_match_tool(query: str) -> str:
 @tool
 def crisis_router(state):
     """Determine if the user is in crisis."""
-    emotion = state.get("emotions", "").lower()
+    # Accept both dict and str input
+    if isinstance(state, dict):
+        emotion = state.get("emotions", "").lower()
+    elif isinstance(state, str):
+        emotion = state.lower()
+    else:
+        emotion = ""
     suicidal_keywords = ["suicidal", "want to die", "end my life", "no will to live", "kill myself"]
     if any(keyword in emotion for keyword in suicidal_keywords):
         return "crisis"

@@ -4,7 +4,7 @@ from typing import TypedDict, List, Optional
 from tools.emotion_detector import detect_emotion
 from tools.emotion_context_search import search_emotion_context
 from tools.memory_store import fetch_user_history
-from tools.mood_forecaster import forecast_mood
+# from tools.mood_forecaster import forecast_mood
 from tools.self_care_websearch import search_self_care_methods
 from tools.selfcare_rag_suggester import rag_selfcare_suggestion
 from tools.therapist_match_rag import rag_match_therapist
@@ -76,7 +76,6 @@ def build_graph():
     graph.add_node("DetectEmotion", detect_emotion)
     graph.add_node("AgentRouter", agent_router_node)
     graph.add_node("FetchMemory", fetch_user_history)
-    graph.add_node("ForecastMood", forecast_mood)
     graph.add_node("SearchSelfCare", search_self_care_methods)
     graph.add_node("RAGSelfCare", rag_selfcare_suggestion)
     graph.add_node("RAGTherapistMatch", rag_match_therapist)
@@ -104,8 +103,7 @@ def build_graph():
     graph.add_edge("CrisisResponder", END)
 
     # Normal path
-    graph.add_edge("FetchMemory", "ForecastMood")
-    graph.add_edge("ForecastMood", "SearchSelfCare")
+    graph.add_edge("FetchMemory", "SearchSelfCare")
 
     # Conditional branching: after SearchSelfCare
     graph.add_conditional_edges(

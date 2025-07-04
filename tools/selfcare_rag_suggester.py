@@ -5,7 +5,7 @@ import os
 
 def rag_selfcare_suggestion(state):
     emotion = state["emotions"]
-    vectorstore = FAISS.load_local("data/selfcare_rag", GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=os.getenv("GEMINI_API_KEY")))
+    vectorstore = FAISS.load_local("data/selfcare_rag", GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=os.getenv("GEMINI_API_KEY")), allow_dangerous_deserialization=True)
     docs = vectorstore.similarity_search(emotion, k=3)
     content = "\n".join([doc.page_content for doc in docs[:3]])
 
@@ -15,5 +15,5 @@ def rag_selfcare_suggestion(state):
         f"Suggest personalized self-care steps for someone feeling {emotion}."
     )
     response = model.predict(prompt)
-    return {**state, "rag_self_care": response.text}
+    return {**state, "rag_self_care": response}
 

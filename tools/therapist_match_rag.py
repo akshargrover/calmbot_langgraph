@@ -6,7 +6,11 @@ def rag_match_therapist(state):
     user_input = state["input"]
     
     embed_model = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-    vectorstore = FAISS.load_local("data/therapist_rag", embed_model)
+    vectorstore = FAISS.load_local(
+        "data/therapist_rag",
+        embed_model,
+        allow_dangerous_deserialization=True
+    )
     docs = vectorstore.similarity_search(user_input, k=2)
 
     model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GEMINI_API_KEY"))
