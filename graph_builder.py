@@ -75,58 +75,20 @@ def build_graph():
     # Core node definitions
     graph.add_node("DetectEmotion", detect_emotion)
     graph.add_node("AgentRouter", agent_router_node)
-    graph.add_node("FetchMemory", fetch_user_history)
-    graph.add_node("SearchSelfCare", search_self_care_methods)
-    graph.add_node("RAGSelfCare", rag_selfcare_suggestion)
-    graph.add_node("RAGTherapistMatch", rag_match_therapist)
-    graph.add_node("TailorPrompt", tailor_prompt)
-    graph.add_node("SuggestCare", suggest_care)
-    graph.add_node("OfferAppointment", offer_appointment)
-    graph.add_node("BookAppointment", book_appointment)
-    graph.add_node("CrisisResponder", crisis_responder)
+    # graph.add_node("FetchMemory", fetch_user_history)
+    # graph.add_node("SearchSelfCare", search_self_care_methods)
+    # graph.add_node("RAGSelfCare", rag_selfcare_suggestion)
+    # graph.add_node("RAGTherapistMatch", rag_match_therapist)
+    # graph.add_node("TailorPrompt", tailor_prompt)
+    # graph.add_node("SuggestCare", suggest_care)
+    # graph.add_node("OfferAppointment", offer_appointment)
+    # graph.add_node("BookAppointment", book_appointment)
+    # graph.add_node("CrisisResponder", crisis_responder)
 
     # Set entry point
     graph.set_entry_point("DetectEmotion")
     graph.add_edge("DetectEmotion", "AgentRouter")
-
-    # Conditional: crisis or normal
-    graph.add_conditional_edges(
-        "AgentRouter",
-        crisis_router,
-        {
-            "crisis": "CrisisResponder",
-            "normal": "FetchMemory"
-        }
-    )
-
-    # Crisis path
-    graph.add_edge("CrisisResponder", END)
-
-    # Normal path
-    graph.add_edge("FetchMemory", "SearchSelfCare")
-
-    # Conditional branching: after SearchSelfCare
-    graph.add_conditional_edges(
-        "SearchSelfCare",
-        use_rag_or_not,
-        {
-            "use_rag": "RAGSelfCare",
-            "skip_rag": "RAGTherapistMatch"
-        }
-    )
-
-    # Continue from RAGSelfCare
-    graph.add_edge("RAGSelfCare", "RAGTherapistMatch")
-
-    # Merge flow
-    graph.add_edge("RAGTherapistMatch", "TailorPrompt")
-
-    # Common path
-    graph.add_edge("TailorPrompt", "SuggestCare")
-    graph.add_edge("SuggestCare", "OfferAppointment")
-    graph.add_edge("OfferAppointment", "BookAppointment")
-    graph.add_edge("BookAppointment", END)
-
+    graph.add_edge("AgentRouter", END)
     return graph.compile()
 
 

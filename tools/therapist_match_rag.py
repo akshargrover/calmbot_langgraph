@@ -16,5 +16,5 @@ def rag_match_therapist(state):
     model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=os.getenv("GEMINI_API_KEY"))
     suggestion = model.predict(f"Match the user to the best therapist from the following:\n{docs}\nUser text: {user_input}")
     
-    return {**state, "matched_therapist_rag": suggestion.text}
+    return {**state, "matched_therapist_rag": suggestion}
 

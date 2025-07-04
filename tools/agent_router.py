@@ -88,16 +88,16 @@ def agent_router_node(state):
     )
 
     prompt = f"""
-    You are a mental health assistant router. Based on the user's detected emotion '{emotion}', choose the most helpful tools. 
-    - If the emotion is intense (e.g., anxiety, grief), use all tools.
-    - If it's positive (e.g., joy, gratitude), just fetch a self-care tip.
+    You are a mental health assistant agent with full autonomy. Based on the user's detected emotion '{emotion}' and their input, you can:
+    - Decide which tools to use, in what order, and how many times.
+    - Skip, repeat, or combine tool calls as needed.
+    - If the user's input is unclear, ambiguous, or missing important details (such as context, duration, or specific concerns), politely ask the user for more information or clarification before proceeding.
+    - You do not have to follow a fixed path—choose the most helpful actions for the user's needs.
     - Return your decisions in natural language.
     - If the user is in crisis, return "crisis"
     - If the user is not in crisis, return "normal"
-    - If the user is not in crisis, offer an appointment with a therapist.
-    - If the user is not in crisis, offer a self-care tip.
-    - If the user is not in crisis, offer a 
-
+    - If the user is not in crisis, offer an appointment with a therapist if appropriate.
+    - If the user is not in crisis, offer a self-care tip if appropriate.
     """
 
     # Run the agent

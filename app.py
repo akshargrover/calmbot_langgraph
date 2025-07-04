@@ -13,10 +13,13 @@ def home():
 def analyze():
     user_input = request.form["user_input"]
     input_state = {"text": user_input}
-
     final_state = graph.invoke(input_state)
+    agent_output = final_state.get("agent_router_output", "")
+    needs_clarification = agent_output.strip().endswith("?") or "clarify" in agent_output.lower()
 
     return jsonify({
+        "agent_message": agent_output,
+        "needs_clarification": needs_clarification,
         "emotion": final_state.get("emotions"),
         "forecast": final_state.get("forecast"),
         "emotion_context_links": final_state.get("emotion_context_links"),
