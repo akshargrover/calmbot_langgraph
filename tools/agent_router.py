@@ -1,7 +1,8 @@
 from langchain.agents import AgentExecutor, initialize_agent, Tool
-from vertexai.language_models import ChatModel
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.tools import tool
 import json
+from config.settings import get_gemini_api_key
 
 # ------------------ TOOL WRAPPERS ------------------
 
@@ -32,13 +33,16 @@ def crisis_router(state):
     if any(keyword in emotion for keyword in suicidal_keywords):
         return "crisis"
     return "normal"
+
+@tool
+
 # ------------------ AGENT NODE ------------------
 
 def agent_router_node(state):
     emotion = state.get("emotions", "")
     previous_trace = state.get("router_trace", [])
 
-    model = ChatModel.from_pretrained("gemini-2.0-flash")
+    model = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=get_gemini_api_key())
     tools = [emotion_context_search_tool, self_care_websearch_tool, rag_self_care_tool]
 
     agent = initialize_agent(
@@ -53,6 +57,9 @@ def agent_router_node(state):
     - If the emotion is intense (e.g., anxiety, grief), use all tools.
     - If it's positive (e.g., joy, gratitude), just fetch a self-care tip.
     - Return your decisions in natural language.
+    - If the user is in crisis, return "crisis"
+    - If the user is not in crisis, return "normal"
+
     """
 
     # Run the agent

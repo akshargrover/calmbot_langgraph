@@ -1,6 +1,6 @@
-from langchain_community.tools.tavily_search.tool import TavilySearchResults
+from langchain_tavily import TavilySearch
 
-tavily = TavilySearchResults(k=3)
+tavily = TavilySearch(k=3)
 
 def search_self_care_methods(state):
     emotion = state["emotions"]

@@ -133,16 +133,20 @@ def build_graph():
 
 
 def export_graph_visual(graph_obj, output_path="graph.png"):
-    dot = Digraph(comment="Emotion Assistant LangGraph")
+    # dot = Digraph(comment="Emotion Assistant LangGraph")
 
-    for node in graph_obj.nodes:
-        dot.node(node)
+    # for node in graph_obj.nodes:
+    #     dot.node(node)
 
-    for edge in graph_obj.edges:
-        dot.edge(edge[0], edge[1])
+    # for edge in graph_obj.edges:
+    #     dot.edge(edge[0], edge[1])
 
-    dot.render(filename=output_path, format="png", cleanup=True)
-    print(f"✅ Graph visualization saved as: {output_path}")
+    # dot.render(filename=output_path, format="png", cleanup=True)
+    # print(f"✅ Graph visualization saved as: {output_path}")
+
+    png_graph = graph_obj.get_graph().draw_mermaid_png()
+    with open("graph.png", "wb") as f:
+        f.write(png_graph)
 
 graph=build_graph()
 

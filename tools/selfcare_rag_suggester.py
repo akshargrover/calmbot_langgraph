@@ -1,10 +1,11 @@
 from langchain_community.vectorstores import FAISS
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from vertexai.language_models import ChatModel
+import os
 
 def rag_selfcare_suggestion(state):
     emotion = state["emotions"]
-    vectorstore = FAISS.load_local("data/selfcare_rag", GoogleGenerativeAIEmbeddings())
+    vectorstore = FAISS.load_local("data/selfcare_rag", GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=os.getenv("GEMINI_API_KEY")))
     docs = vectorstore.similarity_search(emotion, k=3)
     content = "\n".join([doc.page_content for doc in docs[:3]])
 

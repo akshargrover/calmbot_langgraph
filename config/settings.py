@@ -1,12 +1,14 @@
 import os
 import yaml
+from dotenv import load_dotenv
+load_dotenv()
 
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), 'config.yaml')
 
 # Load Gemini API key from environment or config.yaml
 
-def get_gemini_api_key():
-    api_key = os.getenv('GOOGLE_API_KEY')
+def get_gemini_api_key():   
+    api_key = os.getenv('GEMINI_API_KEY')
     if api_key:
         return api_key
     if os.path.exists(CONFIG_PATH):
