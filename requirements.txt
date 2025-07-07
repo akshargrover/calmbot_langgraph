@@ -7,15 +7,16 @@ langchain-openai>=0.2.1
 langchain-google-genai>=0.2.1
 langchain_groq
 graphviz
-# Gemini 2.0 Flash via Vertex AI
+# Gemini 1.5 Flash via Google API
 google-cloud-aiplatform>=1.48.0
 google-generativeai>=0.5.1  # For Gemini API
-
+langchain-google-genai>=0.2.1
 # Vector Store (FAISS)
 faiss-cpu>=1.7.4
 # langchain-community>=0.0.36  # For FAISS integration
 sentence-transformers>=2.2.2  # Optional for embedding support
-
+pydf
+pydantic
 # Embeddings
 transformers>=4.40.0
 torch>=2.2.0
