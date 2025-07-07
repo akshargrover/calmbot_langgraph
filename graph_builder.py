@@ -75,35 +75,38 @@ def build_graph():
     # Core node definitions
     graph.add_node("DetectEmotion", detect_emotion)
     graph.add_node("AgentRouter", agent_router_node)
-    # graph.add_node("FetchMemory", fetch_user_history)
-    # graph.add_node("SearchSelfCare", search_self_care_methods)
-    # graph.add_node("RAGSelfCare", rag_selfcare_suggestion)
-    # graph.add_node("RAGTherapistMatch", rag_match_therapist)
-    # graph.add_node("TailorPrompt", tailor_prompt)
-    # graph.add_node("SuggestCare", suggest_care)
-    # graph.add_node("OfferAppointment", offer_appointment)
-    # graph.add_node("BookAppointment", book_appointment)
-    # graph.add_node("CrisisResponder", crisis_responder)
+    graph.add_node("FetchMemory", fetch_user_history)
+    graph.add_node("SearchSelfCare", search_self_care_methods)
+    graph.add_node("RAGSelfCare", rag_selfcare_suggestion)
+    graph.add_node("RAGTherapistMatch", rag_match_therapist)
+    graph.add_node("TailorPrompt", tailor_prompt)
+    graph.add_node("SuggestCare", suggest_care)
+    graph.add_node("OfferAppointment", offer_appointment)
+    graph.add_node("BookAppointment", book_appointment)
+    graph.add_node("CrisisResponder", crisis_responder)
 
     # Set entry point
     graph.set_entry_point("DetectEmotion")
     graph.add_edge("DetectEmotion", "AgentRouter")
-    graph.add_edge("AgentRouter", END)
+    graph.add_edge("AgentRouter", "TailorPrompt")
+    graph.add_edge("TailorPrompt", "FetchMemory")
+    graph.add_edge("TailorPrompt", "SearchSelfCare")
+    graph.add_edge("AgentRouter", "OfferAppointment")
+    graph.add_edge("OfferAppointment", "RAGTherapistMatch")
+    graph.add_edge("RAGTherapistMatch", "BookAppointment")
+    graph.add_edge("FetchMemory", "RAGSelfCare")
+    graph.add_edge("RAGSelfCare", "SuggestCare")
+    graph.add_edge("AgentRouter", "CrisisResponder")
+    graph.add_edge("BookAppointment", END)
+    graph.add_edge("CrisisResponder", END)
+    graph.add_edge("RAGSelfCare", END)
+    graph.add_edge("SearchSelfCare", END)
+    
     return graph.compile()
 
 
 def export_graph_visual(graph_obj, output_path="graph.png"):
-    # dot = Digraph(comment="Emotion Assistant LangGraph")
-
-    # for node in graph_obj.nodes:
-    #     dot.node(node)
-
-    # for edge in graph_obj.edges:
-    #     dot.edge(edge[0], edge[1])
-
-    # dot.render(filename=output_path, format="png", cleanup=True)
-    # print(f"✅ Graph visualization saved as: {output_path}")
-
+    
     png_graph = graph_obj.get_graph().draw_mermaid_png()
     with open("graph.png", "wb") as f:
         f.write(png_graph)
