@@ -91,7 +91,7 @@ def agent_router_node(state):
     You are a mental health assistant agent with full autonomy. Based on the user's detected emotion '{emotion}' and their input, you can:
     - Decide which tools to use, in what order, and how many times.
     - Skip, repeat, or combine tool calls as needed.
-    - If the user's input is unclear, ambiguous, or missing important details (such as context, duration, or specific concerns), politely ask the user for more information or clarification before proceeding.
+    - If the user's input is unclear, ambiguous, or missing important details (such as context, duration, or specific concerns), you MUST ask the user a specific follow-up question to get the information you need before proceeding.
     - You do not have to follow a fixed path—choose the most helpful actions for the user's needs.
     - Return your decisions in natural language.
     - If the user is in crisis, return "crisis"

@@ -1,23 +1,30 @@
-from flask import Flask, request, jsonify, render_template
-from flask_cors import CORS
+from fastapi import FastAPI, Form
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from graph_builder import graph
 
-app = Flask(__name__)
-CORS(app)
+app = FastAPI()
 
-@app.route("/")
-def home():
-    return render_template("index.html")
+# Allow CORS for local development
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-@app.route("/analyze", methods=["POST"])
-def analyze():
-    user_input = request.form["user_input"]
-    input_state = {"text": user_input}
-    final_state = graph.stream(input_state)
+class AnalyzeRequest(BaseModel):
+    user_input: str
+
+@app.post("/analyze")
+async def analyze(request: AnalyzeRequest):
+    input_state = {"text": request.user_input}
+    final_state = graph.invoke(input_state)
     agent_output = final_state.get("agent_router_output", "")
     needs_clarification = agent_output.strip().endswith("?") or "clarify" in agent_output.lower()
 
-    return jsonify({
+    return {
         "agent_message": agent_output,
         "needs_clarification": needs_clarification,
         "emotion": final_state.get("emotions"),
@@ -33,9 +40,6 @@ def analyze():
         "agent_router_output": final_state.get("agent_router_output"),
         "router_trace": final_state.get("router_trace"),
         "crisis_response": final_state.get("crisis_response"),
-    })
+    }
 
-if __name__ == "__main__":
-    app.run(debug=True)
-    
-
+# To run: uvicorn main:app --reload

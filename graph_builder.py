@@ -1,9 +1,11 @@
 from langgraph.graph import StateGraph, END
+from langgraph.graph.message import Multiple
 from typing import TypedDict, List, Optional
 # Import tools
 from tools.emotion_detector import detect_emotion
 from tools.emotion_context_search import search_emotion_context
 from tools.memory_store import fetch_user_history
+from typing import Annotated 
 # from tools.mood_forecaster import forecast_mood
 from tools.self_care_websearch import search_self_care_methods
 from tools.selfcare_rag_suggester import rag_selfcare_suggestion
@@ -39,7 +41,7 @@ def crisis_router(state):
 
 class GraphState(TypedDict, total=False):
        user_id: str
-       text: str
+       text: Annotated[str, Multiple()]
        emotions: str
        confidence: float
        details: str
