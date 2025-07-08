@@ -8,10 +8,11 @@ from tools.crisis_responder import crisis_responder
 from tools.appointment_tool import appointment_booking_node
 
 
-# Import the simplified router
-from tools.agent_router  import (
+# Import the unified router - now simplified
+from tools.agent_router import (
     smart_unified_router, 
     handle_user_input,
+    route_state,  # This is now the single routing function
 )
 
 class GraphState(TypedDict, total=False):
@@ -62,32 +63,27 @@ class GraphState(TypedDict, total=False):
     web_search_error: Optional[str]
     emotion_clarification: Optional[str]
     clarification_count: int
+    route_decision: Optional[str]  # Added to track routing decisions
 
 def user_input_handler(state, new_input=None):
     """Handle when we need to wait for user input. Accepts new_input as argument for API/streamlit, or falls back to CLI input() for testing."""
     if new_input is None:
         # For CLI/testing: prompt for input
         new_input = input("Waiting for user input: ")
+    
     # Update state with the new input
     updated_state = {**state, "current_input": new_input}
+    
     # Process the input using the unified router's input handler
-    return handle_user_input(updated_state)
-
-def route_state(state: GraphState) -> str:
-    # Example: Use a key like 'route_decision' or 'next_action'
-    route_decision = state.get("route_decision") or state.get("next_action") or "continue"
-    if route_decision == "end":
-        return "end_conversation"
-    elif route_decision == "crisis":
-        return "crisis"
-    elif route_decision == "appointment":
-        return "appointment"
-    elif route_decision == "self_care":
-        return "self_care"
-    elif route_decision == "wait_for_input":
-        return "wait_for_input"
-    else:
-        return "default"
+    processed_state = handle_user_input(updated_state)
+    
+    # If this is a follow-up response (like "Yes can you help me with that"), 
+    # we need to continue the conversation flow
+    if processed_state.get("next_action") == "continue":
+        # Re-run emotion detection and routing for the new input
+        return processed_state
+    
+    return processed_state
 
 def build_graph():
     """Build the simplified graph with unified router"""
@@ -113,17 +109,16 @@ def build_graph():
     # Main flow: Emotion Detection -> Unified Router
     graph.add_edge("DetectEmotion", "Router")
 
-    # Centralized routing using route_state
+    # Centralized routing using the unified route_state function
     graph.add_conditional_edges(
         "Router",
-        route_state,
+        route_state,  # Now uses the unified routing function
         {
             "crisis": "CrisisResponder",
             "appointment": "AppointmentBooking",
             "self_care": "FetchMemory",
             "wait_for_input": "UserInputHandler",
             "end_conversation": END,
-            "default": END  # fallback
         }
     )
 
@@ -136,8 +131,8 @@ def build_graph():
             "crisis": "CrisisResponder",
             "appointment": "AppointmentBooking",
             "self_care": "FetchMemory",
+            
             "end_conversation": END,
-            "default": END
         }
     )
 
@@ -147,8 +142,8 @@ def build_graph():
         route_state,
         {
             "wait_for_input": "UserInputHandler",
+            "appointment": "AppointmentBooking",  # <-- Add this line
             "end_conversation": END,
-            "default": END
         }
     )
 

@@ -24,7 +24,8 @@ async def analyze(request: AnalyzeRequest):
     # Remove 'text' from the final state to avoid post-chain updates
     if 'text' in final_state:
         del final_state['text']
-    agent_output = final_state.get("agent_router_output", "")
+    # Prefer care_suggestion if available, else agent_router_output
+    agent_output = final_state.get("care_suggestion") or final_state.get("agent_router_output", "")
     clarification = final_state.get("clarification_question")
     needs_clarification = clarification is not None and clarification.strip() != ""
 

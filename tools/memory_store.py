@@ -14,7 +14,7 @@ def fetch_user_history(state):
         allow_dangerous_deserialization=True
     )
     # Using MMR (Maximum Marginal Relevance) instead of similarity search
-    mmr_moods = vectorstore.mmr_search(emotion, k=5)
+    mmr_moods = vectorstore.max_marginal_relevance_search(emotion, k=5)
     
     return {**state, "memory": mmr_moods}
 
