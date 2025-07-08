@@ -3,6 +3,8 @@ from config.settings import get_gemini_api_key
 
 def detect_emotion(state):
     user_text = state["text"]
+    if isinstance(user_text, list):
+        user_text = " ".join(x.content if hasattr(x, "content") else str(x) for x in user_text)
     llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=get_gemini_api_key())
     prompt = (
         """
@@ -16,6 +18,7 @@ def detect_emotion(state):
     import json
     try:
         result = json.loads(response.content)
+        print("LLM response: ", response.content)
     except json.JSONDecodeError:
         result = {"emotion": "other", "confidence": 0.5, "details": "Could not parse emotion"}
     state.update({

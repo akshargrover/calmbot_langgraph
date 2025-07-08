@@ -15,7 +15,8 @@ def analyze():
     input_state = {"text": user_input}
     final_state = graph.stream(input_state)
     agent_output = final_state.get("agent_router_output", "")
-    needs_clarification = agent_output.strip().endswith("?") or "clarify" in agent_output.lower()
+    clarification = final_state.get("clarification_question")
+    needs_clarification = clarification is not None and clarification.strip() != ""
 
     return jsonify({
         "agent_message": agent_output,

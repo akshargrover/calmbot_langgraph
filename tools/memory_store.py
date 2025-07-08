@@ -4,7 +4,6 @@ from utils.embedding import get_text_embedding
 from utils.faiss_utils import load_faiss_index, save_faiss_index, add_embedding
 import numpy as np
 import os
-
 def fetch_user_history(state):
     emotion = state["emotions"]
     
@@ -14,12 +13,15 @@ def fetch_user_history(state):
         GoogleGenerativeAIEmbeddings(model="models/embedding-001", google_api_key=os.getenv("GEMINI_API_KEY")),
         allow_dangerous_deserialization=True
     )
-    similar_moods = vectorstore.similarity_search(emotion, k=5)
+    # Using MMR (Maximum Marginal Relevance) instead of similarity search
+    mmr_moods = vectorstore.mmr_search(emotion, k=5)
     
-    return {**state, "memory": similar_moods}
+    return {**state, "memory": mmr_moods}
 
 def store_mood(state):
     user_text = state["text"]
+    if isinstance(user_text, list):
+        user_text = " ".join(x.content if hasattr(x, "content") else str(x) for x in user_text)
     embedding = np.array(get_text_embedding(user_text))
     index = load_faiss_index()
     add_embedding(index, embedding)
