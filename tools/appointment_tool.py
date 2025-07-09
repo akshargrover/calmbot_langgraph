@@ -73,8 +73,16 @@ def _process_user_response(state):
                 "expected_input": "booking_details"
             }
         else:
-            # We have all info, proceed to booking
-            return _complete_booking(state)
+            # Instead of booking immediately, ask for confirmation
+            msg = "I have all the information I need. Would you like to confirm and book the appointment now?"
+            return {
+                **state,
+                "appointment_stage": "confirm_booking",
+                "next_action": "wait_for_input",
+                "appointment_status": msg,
+                "agent_output": msg,
+                "expected_input": "booking_confirmation"
+            }
     
     elif "no" in appointment_response:
         msg = "That's okay. I'm here if you change your mind or need other support."
@@ -164,32 +172,17 @@ def _complete_booking(state):
             "expected_input": "alternative_times"
         }
 
-    # Book the appointment
-    cur.execute("DELETE FROM availability WHERE therapist_id = ? AND slot = ?", (best_match[0], best_slot))
-
-    cur.execute("""
-        INSERT INTO user_logs (user_input, emotion, therapist_name, slot, booked_at)
-        VALUES (?, ?, ?, ?, ?)
-    """, (
-        state["input"],
-        emotion,
-        best_match[1],
-        best_slot,
-        datetime.now().strftime("%Y-%m-%d %H:%M")
-    ))
-
-    conn.commit()
-    conn.close()
-
-    msg = f"Perfect! I've booked your appointment with {best_match[1]} on {best_slot}. You'll receive a confirmation email shortly."
+    # Instead of booking, ask for confirmation
+    msg = f"I found a slot with {best_match[1]} on {best_slot}. Would you like to confirm this booking?"
     return {
         **state,
-        "appointment_stage": "completed",
+        "appointment_stage": "awaiting_final_confirmation",
         "appointment_status": msg,
         "agent_output": msg,
         "booked_therapist": best_match[1],
         "booked_slot": best_slot,
-        "next_action": "continue"
+        "next_action": "wait_for_input",
+        "expected_input": "final_booking_confirmation"
     }
 
 

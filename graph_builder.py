@@ -1,7 +1,7 @@
 from langgraph.graph import StateGraph, END, add_messages
 from typing import TypedDict, List, Optional, Annotated
 from tools.emotion_detector import detect_emotion
-from tools.memory_store import fetch_user_history
+from tools.memory_store import fetch_user_history, store_user_turn
 from tools.selfcare_rag_suggester import suggest_care
 from tools.crisis_responder import crisis_responder 
 from tools.appointment_tool import appointment_booking_node
@@ -100,7 +100,7 @@ def build_graph():
     # Self-care path
     graph.add_node("FetchMemory", fetch_user_history)
     graph.add_node("SuggestCare", suggest_care)
-    
+    graph.add_node("StoreMemory", store_user_turn)
     # Appointment booking
     graph.add_node("AppointmentBooking", appointment_booking_node)
 
@@ -162,6 +162,16 @@ def build_graph():
     graph.add_edge("FetchMemory", "SuggestCare")
     graph.add_edge("SuggestCare", END)
     graph.add_edge("CrisisResponder", END)
+
+    # After user input:
+    graph.add_edge("UserInputHandler", "FetchMemory")
+    graph.add_edge("FetchMemory", "Router")
+
+    # After each agent (CrisisResponder, AppointmentBooking, SuggestCare, etc.):
+    graph.add_edge("CrisisResponder", "StoreMemory")
+    graph.add_edge("AppointmentBooking", "StoreMemory")
+    graph.add_edge("SuggestCare", "StoreMemory")
+    graph.add_edge("StoreMemory", END)  # or loop back as needed
 
     return graph.compile()
 
