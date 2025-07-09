@@ -10,7 +10,7 @@ def appointment_booking_node(state):
     """
     Unified appointment booking node that handles:
     1. Offering appointments based on emotions
-    2. Actual booking process (RAG matching removed)
+    2. Actual booking process 
     
     Returns state with next_action to control flow
     """

@@ -108,7 +108,7 @@ def suggest_care(state):
 
     # --- Combine and return ---
     if rag_suggestion:
-        combined = f"Basic self-care tip: {basic}\n\nPersonalized suggestion: {rag_suggestion}"
+        combined = f"\nPersonalized suggestion: {rag_suggestion}"
     else:
         combined = f"Basic self-care tip: {basic}"
     return {
