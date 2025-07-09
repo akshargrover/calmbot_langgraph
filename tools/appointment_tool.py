@@ -34,10 +34,12 @@ def _offer_appointment(state):
     trigger_emotions = ["anxiety", "depression", "grief", "loneliness", "stress", "trauma"]
     
     if any(e in emotions for e in trigger_emotions):
+        offer = "Based on what you're experiencing, I think speaking with a therapist could be helpful. Would you like me to book an appointment for you?"
         return {
             **state,
             "appointment_stage": "waiting_for_response",
-            "appointment_offer": "Based on what you're experiencing, I think speaking with a therapist could be helpful. Would you like me to book an appointment for you?",
+            "appointment_offer": offer,
+            "agent_output": offer,
             "next_action": "wait_for_input",  # This tells the agent to stop and wait
             "expected_input": "appointment_response"
         }
@@ -58,11 +60,13 @@ def _process_user_response(state):
         required_info = _validate_booking_info(state)
         
         if required_info["missing"]:
+            msg = f"Great! I need some additional information: {', '.join(required_info['missing'])}"
             return {
                 **state,
                 "appointment_stage": "collecting_info",
                 "next_action": "wait_for_input",
-                "appointment_status": f"Great! I need some additional information: {', '.join(required_info['missing'])}",
+                "appointment_status": msg,
+                "agent_output": msg,
                 "expected_input": "booking_details"
             }
         else:
@@ -70,19 +74,22 @@ def _process_user_response(state):
             return _complete_booking(state)
     
     elif "no" in appointment_response:
+        msg = "That's okay. I'm here if you change your mind or need other support."
         return {
             **state,
             "appointment_stage": "declined",
-            "appointment_status": "That's okay. I'm here if you change your mind or need other support.",
+            "appointment_status": msg,
+            "agent_output": msg,
             "next_action": "continue"
         }
     
     else:
-        # Unclear response, ask for clarification
+        msg = "I'm not sure if you'd like to book an appointment. Could you please say 'yes' or 'no'?"
         return {
             **state,
             "appointment_stage": "waiting_for_response",
-            "appointment_status": "I'm not sure if you'd like to book an appointment. Could you please say 'yes' or 'no'?",
+            "appointment_status": msg,
+            "agent_output": msg,
             "next_action": "wait_for_input",
             "expected_input": "appointment_response"
         }
@@ -108,10 +115,12 @@ def _complete_booking(state):
 
     if not candidates:
         conn.close()
+        msg = "I couldn't find a therapist matching your needs. Would you like me to show you all available therapists?"
         return {
             **state,
             "appointment_stage": "no_match",
-            "appointment_status": "I couldn't find a therapist matching your needs. Would you like me to show you all available therapists?",
+            "appointment_status": msg,
+            "agent_output": msg,
             "next_action": "wait_for_input",
             "expected_input": "show_all_therapists"
         }
@@ -142,10 +151,12 @@ def _complete_booking(state):
 
     if not best_match:
         conn.close()
+        msg = "No available slots match your preferences. Would you like to see other available times?"
         return {
             **state,
             "appointment_stage": "no_slots",
-            "appointment_status": "No available slots match your preferences. Would you like to see other available times?",
+            "appointment_status": msg,
+            "agent_output": msg,
             "next_action": "wait_for_input",
             "expected_input": "alternative_times"
         }
@@ -167,10 +178,12 @@ def _complete_booking(state):
     conn.commit()
     conn.close()
 
+    msg = f"Perfect! I've booked your appointment with {best_match[1]} on {best_slot}. You'll receive a confirmation email shortly."
     return {
         **state,
         "appointment_stage": "completed",
-        "appointment_status": f"Perfect! I've booked your appointment with {best_match[1]} on {best_slot}. You'll receive a confirmation email shortly.",
+        "appointment_status": msg,
+        "agent_output": msg,
         "booked_therapist": best_match[1],
         "booked_slot": best_slot,
         "next_action": "continue"

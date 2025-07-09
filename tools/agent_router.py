@@ -1,6 +1,8 @@
-from typing import Dict, Tuple, Optional
+from typing import Dict, Tuple, Optional, List
 from dotenv import load_dotenv
 import os
+from abc import ABC, abstractmethod
+from langchain_core.messages import HumanMessage
 
 
 load_dotenv()
@@ -9,9 +11,114 @@ if not api_key:
     raise ValueError("GOOGLE_API_KEY not found in environment variables. Please set it in a .env file or directly.")
 
 
+# Abstract base class for agents
+class BaseAgent(ABC):
+    """Base class for all specialized agents"""
+    
+    @abstractmethod
+    def process(self, state: Dict) -> Dict:
+        """Process the state and return updated state with agent output"""
+        pass
+    
+    @abstractmethod
+    def get_tools(self) -> List[str]:
+        """Return list of tools this agent can use"""
+        pass
+
+
+# Crisis Support Agent
+class CrisisAgent(BaseAgent):
+    """Handles crisis situations with appropriate resources and tools"""
+    
+    def get_tools(self) -> List[str]:
+        return ["crisis_hotline_lookup", "emergency_contacts", "crisis_resources"]
+    
+    def process(self, state: Dict) -> Dict:
+        """Process crisis situation with specialized tools"""
+        try:
+            # Get crisis resources based on user location/context
+            crisis_resources = [
+                "National Suicide Prevention Lifeline: 988",
+                "Crisis Text Line: Text HOME to 741741",
+                "International Association for Suicide Prevention: https://www.iasp.info/resources/Crisis_Centres/"
+            ]
+            
+            # Get emergency contacts based on location
+            emergency_contacts = [
+                "Emergency Services: 911 (US) / 112 (EU) / 100 (India)",
+                "Local Crisis Centers: Check your local directory"
+            ]
+            
+            # Generate personalized crisis response
+            user_context = state.get("text", "")
+            emotions = state.get("emotions", "")
+            
+            response = f"I'm really concerned about you and want to help. Based on what you've shared, here are immediate resources:\n\n"
+            
+            for resource in crisis_resources:
+                response += f"• {resource}\n"
+            
+            response += f"\nEmergency contacts:\n"
+            for contact in emergency_contacts:
+                response += f"• {contact}\n"
+            
+            response += f"\nYou matter, and there are people who want to help you through this difficult time."
+            
+            return {
+                **state,
+                "agent_output": response,
+                "agent_used": "crisis",
+                "tools_used": self.get_tools(),
+                "next_action": "crisis_handled"
+            }
+        except Exception as e:
+            # Fallback to basic crisis response
+            return {
+                **state,
+                "agent_output": "I'm really sorry you're feeling this way. You're not alone — there are people who care about you and want to help.\n\n💙 Please reach out to someone you trust or contact a mental health professional.\n\n**If you're in immediate danger**, please call emergency services or reach out to a suicide prevention hotline:\n - 🇺🇸 USA: 988\n - 🇮🇳 India: 9152987821 (AASRA)\n\nYou're valued and your life matters. Talking to someone can make a big difference.",
+                "agent_used": "crisis",
+                "tools_used": [],
+                "error": str(e)
+            }
+
+
+# Appointment Agent
+class AppointmentAgent(BaseAgent):
+    """Handles therapy appointment booking with specialized tools"""
+    
+    def get_tools(self) -> List[str]:
+        return ["therapist_finder", "appointment_scheduler", "insurance_checker", "availability_checker"]
+    
+    def process(self, state: Dict) -> Dict:
+        """Delegate to the actual appointment booking tool and ensure agent_output is set."""
+        from tools.appointment_tool import appointment_booking_node
+        result = appointment_booking_node(state)
+        # If appointment_status is present but agent_output is not, map it
+        if "agent_output" not in result and "appointment_status" in result:
+            result["agent_output"] = result["appointment_status"]
+        return result
+
+
+# Self-Care Agent
+class SelfCareAgent(BaseAgent):
+    """Handles self-care recommendations with specialized tools"""
+    
+    def get_tools(self) -> List[str]:
+        return ["rag_search", "emotion_analyzer", "personalized_recommender", "wellness_tracker"]
+    
+    def process(self, state: Dict) -> Dict:
+        """Delegate to the actual self-care suggestion tool and ensure agent_output is set."""
+        from tools.selfcare_rag_suggester import suggest_care
+        result = suggest_care(state)
+        # If agent_output is not set but suggestion is, map it
+        if "agent_output" not in result and "suggestion" in result:
+            result["agent_output"] = result["suggestion"]
+        return result
+
+
 class UnifiedRouter:
     """
-    Complete unified router that handles all routing decisions for the AI agent
+    Enhanced unified router that actually uses specialized agents and tools
     """
     def __init__(self):
         self.crisis_keywords = [
@@ -29,6 +136,11 @@ class UnifiedRouter:
             "fine", "okay", "nothing", "idk", "dunno", "whatever", 
             "sure", "yes", "no", "neutral", "unclear", "mixed", "confused"
         ]
+        
+        # Initialize specialized agents
+        self.crisis_agent = CrisisAgent()
+        self.appointment_agent = AppointmentAgent()
+        self.self_care_agent = SelfCareAgent()
 
     def extract_text_from_state(self, state: Dict) -> str:
         """Extract and normalize text from state"""
@@ -38,22 +150,16 @@ class UnifiedRouter:
         return text.strip().lower()
     
     def validate_input(self, state: Dict) -> Tuple[bool, str]:
-        """
-        Validate if we have sufficient information to proceed
-        Returns: (is_valid, clarification_message)
-        """
+        """Validate if we have sufficient information to proceed"""
         text = self.extract_text_from_state(state)
-        emotions = state.get("emotions", "").strip().lower()
+        emotions = (state.get("emotions") or "").strip().lower()
         
-        # Check for minimal input
         if len(text) < 3:
             return False, "I'd like to understand better. Can you share more about what's on your mind?"
         
-        # Check for vague responses
         if text in self.vague_responses:
             return False, "I want to help you effectively. Could you tell me more about what's been happening or how you've been feeling?"
         
-        # Check for missing or unclear emotions
         if not emotions or emotions in self.vague_responses:
             return False, "I'm having trouble understanding how you're feeling. Could you describe your emotions or what's troubling you?"
         
@@ -62,7 +168,7 @@ class UnifiedRouter:
     def check_crisis(self, state: Dict) -> bool:
         """Check if user is in crisis situation"""
         text = self.extract_text_from_state(state)
-        emotions = state.get("emotions", "").lower()
+        emotions = (state.get("emotions") or "").lower()
         
         combined_text = f"{text} {emotions}"
         return any(keyword in combined_text for keyword in self.crisis_keywords)
@@ -70,232 +176,109 @@ class UnifiedRouter:
     def check_needs_therapy(self, state: Dict) -> bool:
         """Check if user might benefit from therapy"""
         text = self.extract_text_from_state(state)
-        emotions = state.get("emotions", "").lower()
+        emotions = (state.get("emotions") or "").lower()
         
-        # Check for explicit therapy mentions
         therapy_mentions = ["therapy", "therapist", "appointment", "counseling", "counselor"]
         if any(mention in text for mention in therapy_mentions):
             return True
         
-        # Check for high-risk emotions
         return any(emotion in emotions for emotion in self.therapy_emotions)
     
     def determine_route(self, state: Dict) -> str:
-        """
-        Main routing logic - determines the next action
-        Returns: "crisis", "appointment", "self_care", "wait_for_input", or "end"
-        """
-        # First, validate input
-        is_valid, clarification_msg = self.validate_input(state)
+        """Determine which agent should handle the request"""
+        is_valid, _ = self.validate_input(state)
         if not is_valid:
             return "wait_for_input"
         
-        # Check for crisis first (highest priority)
         if self.check_crisis(state):
             return "crisis"
         
-        # Check if user needs therapy
         if self.check_needs_therapy(state):
             return "appointment"
         
-        # Default to self-care
         return "self_care"
     
-    def generate_clarification_message(self, state: Dict) -> dict:
-        """Generate appropriate clarification message based on context and signal if agent should wait for input"""
-        clarification_count = state.get("clarification_count", 0)
-        if clarification_count >= 2:
-            return {
-                "message": "I'm here to support you. Would you like to explore some self-care resources, or would you prefer to speak with a professional?",
-                "wait_for_input": True,
-                "force_end": True  # <-- Add this flag
-            }
-        # Context-specific clarifications
-        emotions = state.get("emotions", "").lower()
-        text = self.extract_text_from_state(state)
-        if not emotions or emotions in self.vague_responses:
-            return {
-                "message": "I want to understand your feelings better. Could you describe what emotions you're experiencing right now?",
-                "wait_for_input": False
-            }
-        if len(text) < 3:
-            return {
-                "message": "I'd like to help you more effectively. Can you tell me more about what's been on your mind?",
-                "wait_for_input": False
-            }
-        # Default clarification
+    def route(self, state: Dict) -> Dict:
+        """Main routing function that delegates to appropriate agents"""
+        route_decision = self.determine_route(state)
+        state.setdefault("router_trace", []).append(f"Routing decision: {route_decision}")
+
+        # Handle input validation
+        if route_decision == "wait_for_input":
+            return self._handle_input_validation(state)
+        
+        # Delegate to appropriate agent
+        if route_decision == "crisis":
+            return self.crisis_agent.process(state)
+        elif route_decision == "appointment":
+            return self.appointment_agent.process(state)
+        elif route_decision == "self_care":
+            return self.self_care_agent.process(state)
+        
+        # Fallback
         return {
-            "message": "I want to make sure I give you the best support. Could you share more details about your situation?",
-            "wait_for_input": False
+            **state,
+            "agent_output": "I'm not sure how to help with that. Could you tell me more about what you're going through?",
+            "agent_used": "router",
+            "tools_used": [],
+            "next_action": "wait_for_input"
         }
     
-    def get_conversation_context(self, state: Dict) -> str:
-        """Extract conversation context from state"""
-        context_parts = []
-        
-        # Get conversation history
-        text_history = state.get("text", [])
-        if isinstance(text_history, list) and len(text_history) > 1:
-            recent_messages = text_history[-3:]  # Last 3 messages for context
-            for msg in recent_messages:
-                if hasattr(msg, 'content'):
-                    context_parts.append(msg.content)
-                else:
-                    context_parts.append(str(msg))
-        
-        # Get previous emotions
-        emotions = state.get("emotions", "").strip()
-        if emotions and emotions not in self.vague_responses:
-            context_parts.append(f"feeling {emotions}")
-        
-        # Get memory context
-        memory = state.get("memory", [])
-        if memory:
-            context_parts.extend(memory[-2:])  # Last 2 memory items
-        
-        return " ".join(context_parts).strip()
-
-    def route(self, state: Dict) -> Dict:
-        """
-        Main routing function that updates state based on routing decision
-        """
-        route_decision = self.determine_route(state)
+    def _handle_input_validation(self, state: Dict) -> Dict:
+        """Handle input validation and clarification"""
         clarification_count = state.get("clarification_count", 0)
-        conversation_context = self.get_conversation_context(state)
         
-        response = {
-            **state,
-            "route": route_decision,
-            "clarification_count": clarification_count
-        }
+        if clarification_count >= 2:
+            return {
+                **state,
+                "agent_output": "I'm here to support you. Would you like to explore some self-care resources, or would you prefer to speak with a professional? If you need more help, please start a new conversation.",
+                "agent_used": "router",
+                "tools_used": [],
+                "next_action": "end",
+                "clarification_count": clarification_count + 1
+            }
         
-        if route_decision == "wait_for_input":
-            clarification_result = self.generate_clarification_message(state)
-            if clarification_result.get("force_end"):
-                response.update({
-                    "agent_router_output": clarification_result["message"] + " If you need more help, please start a new conversation.",
-                    "next_action": "end",
-                    "expected_input": "",
-                    "clarification_count": clarification_count + 1
-                })
-            elif clarification_result.get("wait_for_input"):
-                response.update({
-                    "agent_router_output": clarification_result["message"] + " Please provide more information to continue.",
-                    "next_action": "wait_for_input",
-                    "expected_input": "clarification",
-                    "clarification_count": clarification_count + 1
-                })
-            else:
-                response.update({
-                    "agent_router_output": clarification_result["message"],
-                    "next_action": "wait_for_input",
-                    "expected_input": "clarification",
-                    "clarification_count": clarification_count + 1
-                })
-        elif route_decision == "crisis":
-            response.update({
-                "agent_router_output": """ I'm really sorry you're feeling this way. You're not alone — there are people who care about you and want to help.\n 💙 Please reach out to someone you trust or contact a mental health professional.\n\n *If you're in immediate danger**, please call emergency services or reach out to a suicide prevention hotline:\n - 🇺🇸 USA: 988\n 🇮🇳 India: 9152987821 (AASRA)\n You're valued and your life matters. Talking to someone can make a big difference.\n """,
-                "next_action": "crisis"
-            })
-        elif route_decision == "appointment":
-            emotions = state.get("emotions", "").strip()
-            if emotions and emotions not in self.vague_responses:
-                response.update({
-                    "agent_router_output": f"I understand you're feeling {emotions}. Let me help you find professional support that could be really beneficial.",
-                    "next_action": "appointment"
-                })
-            else:
-                response.update({
-                    "agent_router_output": "I understand you're going through a difficult time. Let me help you find professional support that could be really beneficial.",
-                    "next_action": "appointment"
-                })
-        elif route_decision == "self_care":
-            emotions = state.get("emotions", "").strip()
-            
-            # Handle follow-up responses in self-care flow
-            current_input = state.get("current_input", "").lower()
-            if any(word in current_input for word in ["yes", "sure", "help", "okay", "please"]):
-                if emotions and emotions not in self.vague_responses:
-                    response.update({
-                        "agent_router_output": f"Great! I'll help you with some strategies for dealing with {emotions}. Let me find some personalized suggestions for you.",
-                        "next_action": "self_care"
-                    })
-                else:
-                    response.update({
-                        "agent_router_output": "Great! I'll help you with some self-care strategies. Let me find some personalized suggestions for you.",
-                        "next_action": "self_care"
-                    })
-            else:
-                # Initial self-care suggestion
-                if emotions and emotions not in self.vague_responses:
-                    response.update({
-                        "agent_router_output": f"I hear that you're feeling {emotions}. Let me suggest some self-care strategies that might help.",
-                        "next_action": "self_care"
-                    })
-                else:
-                    response.update({
-                        "agent_router_output": "I understand you're going through something difficult. Let me suggest some self-care strategies that might help.",
-                        "next_action": "self_care"
-                    })
+        _, clarification_msg = self.validate_input(state)
         
         return {
-            **response,
-            "route_decision": route_decision
+            **state,
+            "agent_output": clarification_msg,
+            "agent_used": "router",
+            "tools_used": [],
+            "next_action": "wait_for_input",
+            "expected_input": "clarification",
+            "clarification_count": clarification_count + 1
         }
-
-    def get_graph_route(self, state: Dict) -> str:
-        """
-        Convert state to graph routing decision
-        This replaces the route_state function from graph_builder
-        """
-        # Get the route decision from state or determine it
-        route_decision = state.get("route_decision") or state.get("next_action")
-        
-        # If no route decision exists, determine it now
-        if not route_decision:
-            route_decision = self.determine_route(state)
-        
-        # Map to graph edge names
-        route_mapping = {
-            "crisis": "crisis",
-            "appointment": "appointment", 
-            "self_care": "self_care",
-            "wait_for_input": "wait_for_input",
-            "end": "end_conversation"
-        }
-        
-        return route_mapping.get(route_decision, "end_conversation")
 
 # Create singleton instance
 unified_router = UnifiedRouter()
 
-
 # Main router function to use in your graph
 def smart_unified_router(state: Dict) -> Dict:
-    """
-    Main router function to be used in the StateGraph
-    """
+    """Main router function that uses agents and tools"""
     return unified_router.route(state)
 
-
-# Single routing function for conditional edges
+# Keep your existing helper functions for compatibility
 def route_state(state: Dict) -> str:
-    """
-    Single routing function that handles all conditional edge routing
-    """
-    return unified_router.get_graph_route(state)
+    """Single routing function that handles all conditional edge routing"""
+    next_action = state.get("next_action", "")
+    
+    route_mapping = {
+        "crisis_handled": "crisis",
+        "appointment_processed": "appointment",
+        "self_care_provided": "self_care",
+        "wait_for_input": "wait_for_input",
+        "end": "end_conversation"
+    }
+    
+    return route_mapping.get(next_action, "end_conversation")
 
-
-# Helper function to handle user input responses
 def handle_user_input(state: Dict) -> Dict:
-    """
-    Handle user input and update state accordingly
-    """
+    """Handle user input and update state accordingly"""
     current_input = state.get("current_input", "")
     expected_input = state.get("expected_input", "")
     
     if not current_input:
-        # Still waiting for input
         return {**state, "next_action": "wait_for_input"}
     
     # Add current input to conversation history
@@ -303,32 +286,25 @@ def handle_user_input(state: Dict) -> Dict:
     if not isinstance(text_history, list):
         text_history = []
     
-    # Create a simple message object for the current input
-    class SimpleMessage:
-        def __init__(self, content):
-            self.content = content
+
     
-    text_history.append(SimpleMessage(current_input))
+    text_history.append(HumanMessage(current_input))
     
-    # Process different types of expected input
     if expected_input == "clarification":
         return {
             **state,
             "text": text_history,
-            "current_input": current_input,  # Keep current input for processing
+            "current_input": current_input,
             "next_action": "continue",
             "expected_input": ""
         }
     
     elif expected_input == "appointment_response":
-        # Handle appointment booking responses
         return handle_appointment_response(state, current_input)
     
     elif expected_input == "booking_details":
-        # Handle booking detail responses
         return handle_booking_details(state, current_input)
     
-    # Default: continue with current input
     return {
         **state,
         "text": text_history,
@@ -336,7 +312,6 @@ def handle_user_input(state: Dict) -> Dict:
         "next_action": "continue",
         "expected_input": ""
     }
-
 
 def handle_appointment_response(state: Dict, user_input: str) -> Dict:
     """Handle appointment booking responses"""
@@ -359,12 +334,10 @@ def handle_appointment_response(state: Dict, user_input: str) -> Dict:
             "expected_input": ""
         }
 
-
 def handle_booking_details(state: Dict, user_input: str) -> Dict:
     """Handle booking detail responses"""
     user_input_lower = user_input.lower()
     
-    # Parse time preferences
     if "morning" in user_input_lower:
         state["preferred_time"] = "morning"
     elif "afternoon" in user_input_lower:
@@ -372,7 +345,6 @@ def handle_booking_details(state: Dict, user_input: str) -> Dict:
     elif "evening" in user_input_lower:
         state["preferred_time"] = "evening"
     
-    # Parse location preferences
     if "online" in user_input_lower or "virtual" in user_input_lower:
         state["location"] = "online"
     elif "in-person" in user_input_lower or "office" in user_input_lower:
@@ -385,8 +357,6 @@ def handle_booking_details(state: Dict, user_input: str) -> Dict:
         "expected_input": ""
     }
 
-
-# Conditional routing functions for StateGraph
 def input_flow_condition(state: Dict) -> str:
     """Conditional routing for input flow"""
     next_action = state.get("next_action", "continue")
@@ -396,3 +366,27 @@ def input_flow_condition(state: Dict) -> str:
         return "continue"
     else:
         return "end"
+
+# Standalone crisis checker node for pre-emotion detection use in the graph
+
+def crisis_checker_node(state: Dict) -> Dict:
+    """
+    Checks for crisis keywords in the raw user input (before emotion detection).
+    If a crisis is detected, sets next_action='crisis', else next_action='continue'.
+    """
+    # Use the same crisis keywords as UnifiedRouter
+    crisis_keywords = [
+        "suicidal", "want to die", "end my life", "no will to live","want to give up",
+        "kill myself", "hurt myself", "can't go on", "no point living",
+        "end it all", "suicide", "self harm"
+    ]
+    # Extract raw user input (assume it's in state['text'] as a list or string)
+    text = state.get("text", "")
+    if isinstance(text, list):
+        text = " ".join(str(x) for x in text)
+    text = text.strip().lower()
+    # Check for any crisis keyword
+    if any(keyword in text for keyword in crisis_keywords):
+        return {**state, "next_action": "crisis"}
+    else:
+        return {**state, "next_action": "continue"}

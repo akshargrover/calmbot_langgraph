@@ -2,8 +2,7 @@ from langgraph.graph import StateGraph, END, add_messages
 from typing import TypedDict, List, Optional, Annotated
 from tools.emotion_detector import detect_emotion
 from tools.memory_store import fetch_user_history
-from tools.selfcare_rag_suggester import rag_selfcare_suggestion
-from tools.self_care_recommender import suggest_care
+from tools.selfcare_rag_suggester import suggest_care
 from tools.crisis_responder import crisis_responder 
 from tools.appointment_tool import appointment_booking_node
 
@@ -13,6 +12,7 @@ from tools.agent_router import (
     smart_unified_router, 
     handle_user_input,
     route_state,  # This is now the single routing function
+    crisis_checker_node,
 )
 
 class GraphState(TypedDict, total=False):
@@ -89,6 +89,8 @@ def build_graph():
     """Build the simplified graph with unified router"""
     graph = StateGraph(GraphState)
 
+    # Crisis pre-check node
+    graph.add_node("CrisisChecker", crisis_checker_node)
     # Core processing nodes
     graph.add_node("DetectEmotion", detect_emotion)
     graph.add_node("Router", smart_unified_router)
@@ -97,14 +99,23 @@ def build_graph():
     
     # Self-care path
     graph.add_node("FetchMemory", fetch_user_history)
-    graph.add_node("RAGSelfCare", rag_selfcare_suggestion)
     graph.add_node("SuggestCare", suggest_care)
     
     # Appointment booking
     graph.add_node("AppointmentBooking", appointment_booking_node)
 
-    # Entry point
-    graph.set_entry_point("DetectEmotion")
+    # Entry point is now CrisisChecker
+    graph.set_entry_point("CrisisChecker")
+
+    # CrisisChecker: if crisis, go to CrisisResponder, else DetectEmotion
+    graph.add_conditional_edges(
+        "CrisisChecker",
+        lambda state: "crisis" if state.get("next_action") == "crisis" else "no_crisis",
+        {
+            "crisis": "CrisisResponder",
+            "no_crisis": "DetectEmotion",
+        }
+    )
 
     # Main flow: Emotion Detection -> Unified Router
     graph.add_edge("DetectEmotion", "Router")
@@ -148,8 +159,7 @@ def build_graph():
     )
 
     # Self-care flow
-    graph.add_edge("FetchMemory", "RAGSelfCare")
-    graph.add_edge("RAGSelfCare", "SuggestCare")
+    graph.add_edge("FetchMemory", "SuggestCare")
     graph.add_edge("SuggestCare", END)
     graph.add_edge("CrisisResponder", END)
 

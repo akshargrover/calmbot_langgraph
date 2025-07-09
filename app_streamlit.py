@@ -18,7 +18,11 @@ user_input = st.text_input("How are you feeling today?", key="user_input")
 if st.button("Send") and user_input:
     st.session_state.conversation.append(("You", user_input))
     result = get_agent_response(user_input)
-    st.session_state.conversation.append(("CalmBot", result["agent_message"]))
+    # Fallback: if agent_message is empty, use crisis_response if present
+    agent_message = result.get("agent_message")
+    if not agent_message and result.get("crisis_response"):
+        agent_message = result["crisis_response"]
+    st.session_state.conversation.append(("CalmBot", agent_message))
 
     # If clarification is needed, prompt for more input
     while result.get("needs_clarification"):
@@ -26,7 +30,13 @@ if st.button("Send") and user_input:
         if st.button("Send Clarification", key=f"clarify_btn_{len(st.session_state.conversation)}") and clarification:
             st.session_state.conversation.append(("You", clarification))
             result = get_agent_response(clarification)
-            st.session_state.conversation.append(("CalmBot", result["agent_message"]))
+            # Fallback for clarification as well
+            agent_message = result.get("agent_message")
+            if not agent_message and result.get("crisis_response"):
+                agent_message = result["crisis_response"]
+            st.session_state.conversation.append(("CalmBot", agent_message))
+            st.json(result)  # Add this after result = get_agent_response(user_input)
+
 
 for speaker, message in st.session_state.conversation:
     st.markdown(f"**{speaker}:** {message}")

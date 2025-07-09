@@ -19,13 +19,27 @@ class AnalyzeRequest(BaseModel):
 
 @app.post("/analyze")
 async def analyze(request: AnalyzeRequest):
-    input_state = {"text": [request.user_input]}  # Ensure text is a list
+    input_state = {
+    "user_id": "demo_user",
+    "text": [request.user_input],
+    "current_input": request.user_input,
+    "clarification_count": 0,
+    "memory": [],
+    "emotion_context_links": []
+    }
     final_state = graph.invoke(input_state)
     # Remove 'text' from the final state to avoid post-chain updates
     if 'text' in final_state:
         del final_state['text']
-    # Prefer care_suggestion if available, else agent_router_output
-    agent_output = final_state.get("care_suggestion") or final_state.get("agent_router_output", "")
+    # Prefer agent_output, then care_suggestion, then suggestion, then appointment_offer, then appointment_status, then agent_router_output
+    agent_output = (
+        final_state.get("agent_output")
+        or final_state.get("care_suggestion")
+        or final_state.get("suggestion")
+        or final_state.get("appointment_offer")
+        or final_state.get("appointment_status")
+        or final_state.get("agent_router_output", "")
+    )
     clarification = final_state.get("clarification_question")
     needs_clarification = clarification is not None and clarification.strip() != ""
 

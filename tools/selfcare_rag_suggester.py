@@ -1,103 +1,7 @@
 # selfcare_rag_suggester.py - Enhanced version
 from langchain_community.vectorstores import FAISS
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 import os
-
-def rag_selfcare_suggestion(state):
-    """
-    Enhanced RAG suggestion with better error handling and personalization
-    """
-    emotion = state.get("emotions", "").strip()
-    user_input = state.get("text", "")
-    
-    # Validate input
-    if not emotion:
-        return {
-            **state,
-            "rag_self_care": "I'd like to give you personalized suggestions. Could you tell me more about how you're feeling?",
-            "next_action": "wait_for_input",
-            "expected_input": "emotion_clarification"
-        }
-    
-    try:
-        # Load RAG database
-        embed_model = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-001",
-            google_api_key=os.getenv("GEMINI_API_KEY")
-        )
-        
-        vectorstore = FAISS.load_local(
-            "data/selfcare_rag",
-            embed_model,
-            allow_dangerous_deserialization=True
-        )
-        
-        # Search for relevant content
-        # Use both emotion and user input for better matching
-        search_query = f"{emotion} {user_input}"
-        docs = vectorstore.similarity_search(search_query, k=3)
-        
-        if not docs:
-            # Fallback search with just emotion
-            docs = vectorstore.similarity_search(emotion, k=3)
-        
-        if not docs:
-            return {
-                **state,
-                "rag_self_care": "I don't have specific suggestions for this situation right now, but I'm here to support you.",
-                "next_action": "continue"
-            }
-        
-        # Extract content
-        content = "\n".join([doc.page_content for doc in docs])
-        
-        # Generate personalized response
-        model = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
-            google_api_key=os.getenv("GEMINI_API_KEY")
-        )
-        
-        prompt = f"""
-        Based on this self-care content:
-        {content}
-        
-        User is feeling: {emotion}
-        User context: {user_input}
-        
-        Provide personalized, actionable self-care suggestions that:
-        1. Are specific to their emotional state
-        2. Are practical and doable today
-        3. Are empathetic and supportive
-        4. Include both immediate relief and longer-term strategies
-        
-        Keep response under 200 words and focus on what they can do right now.
-        """
-        
-        response = model.invoke(prompt)
-        suggestion = response.content if hasattr(response, 'content') else str(response)
-        
-        return {
-            **state,
-            "rag_self_care": suggestion,
-            "next_action": "continue"
-        }
-        
-    except FileNotFoundError:
-        return {
-            **state,
-            "rag_self_care": "I'm still learning about self-care strategies. Let me help you with some general techniques that work well.",
-            "rag_error": "RAG database not found",
-            "next_action": "continue"
-        }
-    except Exception as e:
-        print(f"RAG suggestion failed: {e}")
-        return {
-            **state,
-            "rag_self_care": "I'm having trouble accessing my knowledge base right now, but I'm here to help you through this.",
-            "rag_error": str(e),
-            "next_action": "continue"
-        }
 
 # Additional helper function for emotion validation
 def validate_emotion_input(state):
@@ -137,5 +41,79 @@ def create_self_care_chain(state):
     # Proceed with self-care chain
     return {
         **state,
+        "next_action": "continue"
+    }
+
+def suggest_care(state):
+    # --- Basic suggestion logic ---
+    basic_suggestions = {
+        "anxiety": "Try a 4-7-8 breathing exercise: breathe in for 4, hold for 7, exhale for 8.",
+        "depression": "Consider a gentle walk outside, even just for 5 minutes, or reach out to someone you trust.",
+        "joy": "Reflect on what brought you joy. Consider writing about it or sharing with someone.",
+        "gratitude": "Write a short thank-you message to someone who has made a difference in your life.",
+        "shame": "Practice self-compassion. Remember, everyone makes mistakes - they're part of growth.",
+        "sadness": "Allow yourself to feel sad - it's valid. Try gentle movement or connecting with a friend.",
+        "anger": "Take 5 deep breaths before reacting. Consider writing down your feelings first.",
+        "fear": "Try grounding: name 5 things you can see, 4 you can touch, 3 you can hear, 2 you can smell, 1 you can taste.",
+        "stress": "Try progressive muscle relaxation: tense and release each muscle group for 5 seconds.",
+        "loneliness": "Reach out to one person today, even with a simple 'thinking of you' message.",
+        "grief": "Honor your feelings. Consider creating a small ritual or memory to acknowledge your loss.",
+        "overwhelm": "Break down your tasks into smaller steps. Focus on just one thing at a time.",
+        "other": "Take a moment to check in with yourself and acknowledge how you're feeling."
+    }
+    emotions = (state.get("emotions") or "").lower()
+    primary_emotion = emotions.split(",")[0].strip() if "," in emotions else emotions
+    basic = basic_suggestions.get(primary_emotion, basic_suggestions["other"])
+
+    # --- RAG suggestion logic ---
+    rag_suggestion = None
+    try:
+        embed_model = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-001",
+            google_api_key=os.getenv("GEMINI_API_KEY")
+        )
+        vectorstore = FAISS.load_local(
+            "data/selfcare_rag",
+            embed_model,
+            allow_dangerous_deserialization=True
+        )
+        user_input = state.get("text", "")
+        search_query = f"{emotions} {user_input}"
+        docs = vectorstore.similarity_search(search_query, k=3)
+        if not docs:
+            docs = vectorstore.similarity_search(emotions, k=3)
+        if docs:
+            content = "\n".join([doc.page_content for doc in docs])
+            model = ChatGoogleGenerativeAI(
+                model="gemini-1.5-flash",
+                google_api_key=os.getenv("GEMINI_API_KEY")
+            )
+            prompt = f"""
+            Based on this self-care content:
+            {content}
+            User is feeling: {emotions}
+            User context: {user_input}
+            Provide personalized, actionable self-care suggestions that:
+            1. Are specific to their emotional state
+            2. Are practical and doable today
+            3. Are empathetic and supportive
+            4. Include both immediate relief and longer-term strategies
+            Keep response under 200 words and focus on what they can do right now.
+            """
+            response = model.invoke(prompt)
+            rag_suggestion = response.content if hasattr(response, 'content') else str(response)
+    except Exception as e:
+        print(f"Unified suggest_care: RAG suggestion failed: {e}")
+        rag_suggestion = None
+
+    # --- Combine and return ---
+    if rag_suggestion:
+        combined = f"Basic self-care tip: {basic}\n\nPersonalized suggestion: {rag_suggestion}"
+    else:
+        combined = f"Basic self-care tip: {basic}"
+    return {
+        **state,
+        "suggestion": combined,
+        "agent_output": combined,
         "next_action": "continue"
     }
