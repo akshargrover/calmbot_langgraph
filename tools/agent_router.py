@@ -286,8 +286,6 @@ def handle_user_input(state: Dict) -> Dict:
     if not isinstance(text_history, list):
         text_history = []
     
-
-    
     text_history.append(HumanMessage(current_input))
     
     if expected_input == "clarification":
@@ -300,7 +298,16 @@ def handle_user_input(state: Dict) -> Dict:
         }
     
     elif expected_input == "appointment_response":
-        return handle_appointment_response(state, current_input)
+        # Fix: set appointment_stage to user_responded so the booking node processes the reply
+        return {
+            **state,
+            "text": text_history,
+            "appointment_response": current_input,
+            "appointment_stage": "user_responded",
+            "current_input": "",
+            "next_action": "continue",
+            "expected_input": ""
+        }
     
     elif expected_input == "booking_details":
         return handle_booking_details(state, current_input)

@@ -31,7 +31,10 @@ def appointment_booking_node(state):
 def _offer_appointment(state):
     """Step 1: Check if user needs appointment and offer it"""
     emotions = state.get("emotions", "").lower()
-    trigger_emotions = ["anxiety", "depression", "grief", "loneliness", "stress", "trauma"]
+    trigger_emotions = [
+        "anxiety", "depression", "grief", "loneliness", "stress", "trauma",
+        "sadness", "hopelessness", "overwhelm", "panic", "despair", "worry", "fear", "loss", "isolation"
+    ]
     
     if any(e in emotions for e in trigger_emotions):
         offer = "Based on what you're experiencing, I think speaking with a therapist could be helpful. Would you like me to book an appointment for you?"
