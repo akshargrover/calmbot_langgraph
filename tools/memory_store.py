@@ -60,3 +60,14 @@ def store_user_turn(state):
         f.write(json.dumps(turn) + "\n")
     return state
 
+import os
+
+def clear_user_memory(user_id: str):
+    # Example: if you store memory as a file per user
+    log_dir = "data/user_logs"
+    filename = os.path.join(log_dir, f"{user_id}.jsonl")
+    if os.path.exists(filename):
+        os.remove(filename)
+        return True
+    return False
+

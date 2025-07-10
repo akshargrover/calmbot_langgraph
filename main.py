@@ -2,6 +2,7 @@ from fastapi import FastAPI, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from graph_builder import graph
+from tools.memory_store import fetch_user_history, clear_user_memory  # Import your memory fetcher
 
 app = FastAPI()
 
@@ -19,14 +20,28 @@ class AnalyzeRequest(BaseModel):
 
 @app.post("/analyze")
 async def analyze(request: AnalyzeRequest):
-    input_state = {
-    "user_id": "demo_user",
-    "text": [request.user_input],
-    "current_input": request.user_input,
-    "clarification_count": 0,
-    "memory": [],
-    "emotion_context_links": []
-    }
+    user_id = "demo_user"
+    # 1. Fetch last state from memory
+    last_state = fetch_user_history({"user_id": user_id})
+    expected_input = last_state.get("expected_input")
+    
+    # 2. Prepare new state
+    input_state = last_state.copy() if last_state else {}
+    input_state["user_id"] = user_id
+    input_state["current_input"] = request.user_input
+    input_state["text"] = [request.user_input]
+    
+    # 3. If expecting a specific field, fill it
+    if expected_input:
+        input_state[expected_input] = request.user_input
+        # Optionally clear expected_input so the node knows it was filled
+        input_state["expected_input"] = None
+
+    # 4. Always reset clarification count if needed
+    input_state.setdefault("clarification_count", 0)
+    input_state.setdefault("memory", [])
+    input_state.setdefault("emotion_context_links", [])
+
     final_state = graph.invoke(input_state)
     # Remove 'text' from the final state to avoid post-chain updates
     if 'text' in final_state:
@@ -77,5 +92,10 @@ async def analyze(request: AnalyzeRequest):
         "router_trace": final_state.get("router_trace"),
         "crisis_response": final_state.get("crisis_response"),
     }
+
+@app.post("/clear_memory")
+async def clear_memory(user_id: str = "demo_user"):
+    success = clear_user_memory(user_id)
+    return {"success": success}
 
 # To run: uvicorn main:app --reload

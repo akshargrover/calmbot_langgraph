@@ -169,15 +169,14 @@ class UnifiedRouter:
         return True, ""
     
     def check_crisis(self, state: Dict) -> bool:
-        """Check if user is in crisis situation"""
+        """Check if user is in crisis situation using LLM"""
         text = self.extract_text_from_state(state)
         emotions = state.get("emotions") or ""
         if isinstance(emotions, list):
             emotions = " ".join(str(e) for e in emotions)
-        emotions = emotions.strip().lower()
-        
+        emotions = emotions.strip()
         combined_text = f"{text} {emotions}"
-        return any(keyword in combined_text for keyword in self.crisis_keywords)
+        return is_crisis_message_llm(combined_text)
     
     def check_needs_therapy(self, state: Dict) -> bool:
         """Check if user might benefit from therapy"""
@@ -397,22 +396,33 @@ def input_flow_condition(state: Dict) -> str:
 
 def crisis_checker_node(state: Dict) -> Dict:
     """
-    Checks for crisis keywords in the raw user input (before emotion detection).
+    Checks for crisis using LLM in the raw user input (before emotion detection).
     If a crisis is detected, sets next_action='crisis', else next_action='continue'.
     """
-    # Use the same crisis keywords as UnifiedRouter
-    crisis_keywords = [
-        "suicidal", "want to die", "end my life", "no will to live","want to give up",
-        "kill myself", "hurt myself", "can't go on", "no point living",
-        "end it all", "suicide", "self harm"
-    ]
-    # Extract raw user input (assume it's in state['text'] as a list or string)
     text = state.get("text", "")
     if isinstance(text, list):
         text = " ".join(str(x) for x in text)
-    text = text.strip().lower()
-    # Check for any crisis keyword
-    if any(keyword in text for keyword in crisis_keywords):
+    text = text.strip()
+    if is_crisis_message_llm(text):
         return {**state, "next_action": "crisis"}
     else:
         return {**state, "next_action": "continue"}
+    
+# tools/llm_utils.py
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+def is_crisis_message_llm(user_message: str) -> bool:
+    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")  # or your preferred model
+    prompt = (
+        "You are a mental health assistant. "
+        "Given the following user message, does it indicate suicidal ideation, self-harm, or a mental health crisis? "
+        "Reply only with 'yes' or 'no'.\n"
+        f"User message: {user_message}"
+    )
+    response = llm.invoke(prompt)
+    # Fix: extract text from AIMessage if needed
+    if hasattr(response, "content"):
+        response_text = response.content
+    else:
+        response_text = str(response)
+    return response_text.strip().lower().startswith("yes")

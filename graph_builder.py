@@ -31,8 +31,6 @@ class GraphState(TypedDict, total=False):
     preferred_therapist: Optional[str]
     location: Optional[str]
     suggestion: str
-    tailored_prompt: str
-    rag_self_care: Optional[str]
     crisis_response: Optional[str]
     route: str
     memory: List[str]
@@ -40,7 +38,6 @@ class GraphState(TypedDict, total=False):
     agent_router_output: Optional[str]
     router_trace: List[str]
     rag_error: Optional[str]
-    web_search_error: Optional[str]
     emotion_clarification: Optional[str]
     clarification_count: int
     route_decision: Optional[str]

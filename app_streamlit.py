@@ -11,8 +11,17 @@ if "conversation" not in st.session_state:
 USER_AVATAR = "🧑"
 BOT_AVATAR = "🤖"
 
+API_URL= "http://localhost:8000"
 # Chat message container
 chat_container = st.container()
+
+# Add a "Clear Memory" button
+if st.button("Clear Memory / Reset Conversation"):
+    response = requests.post(f"{API_URL}/clear_memory", json={"user_id": "demo_user"})
+    if response.json().get("success"):
+        st.success("Memory cleared! Start a new conversation.")
+    else:
+        st.error("Failed to clear memory.")
 
 # Input at the bottom
 with st.form(key="chat_form", clear_on_submit=True):
