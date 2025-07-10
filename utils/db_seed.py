@@ -30,6 +30,17 @@ def seed_data():
         slot TEXT,
         booked_at TEXT
     );
+                      
+    CREATE TABLE IF NOT EXISTS bookings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        therapist_id INTEGER,
+        therapist_name TEXT,
+        slot TEXT,
+        user_id TEXT,
+        emotion TEXT,
+        status TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
     """)
 
     # Insert therapists
@@ -52,6 +63,8 @@ def seed_data():
 
     conn.commit()
     conn.close()
+
+    
 
 if __name__ == "__main__":
     seed_data()

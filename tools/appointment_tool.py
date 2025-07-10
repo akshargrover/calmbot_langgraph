@@ -4,6 +4,149 @@ from langchain_community.vectorstores import FAISS
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_google_genai import ChatGoogleGenerativeAI
 import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+class DatabaseManager:
+    """Handles database operations with proper error handling"""
+    
+    def __init__(self, db_path="data/therapist.db"):
+        self.db_path = db_path
+    
+    def get_connection(self):
+        """Get database connection with error handling"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row  # Enable dict-like access
+            return conn
+        except sqlite3.Error as e:
+            logger.error(f"Database connection error: {e}")
+            raise
+    
+    def find_therapists(self, specialty=None, location=None, online_preferred=False):
+        """Find therapists based on criteria"""
+        conn = self.get_connection()
+        try:
+            query = "SELECT id, name, specialty, location, online_available, rating FROM therapists WHERE 1=1"
+            params = []
+            
+            if specialty:
+                query += " AND (specialty LIKE ? OR specialty IS NULL)"
+                params.append(f"%{specialty}%")
+            
+            if location and not online_preferred:
+                query += " AND location LIKE ?"
+                params.append(f"%{location}%")
+            
+            if online_preferred:
+                query += " AND online_available = 1"
+            
+            query += " ORDER BY rating DESC"
+            
+            cur = conn.cursor()
+            cur.execute(query, params)
+            return cur.fetchall()
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error finding therapists: {e}")
+            return []
+        finally:
+            conn.close()
+    
+    def get_available_slots(self, therapist_id, preferred_time=None):
+        """Get available slots for a therapist"""
+        conn = self.get_connection()
+        try:
+            query = """
+                SELECT slot FROM availability 
+                WHERE therapist_id = ? AND is_available = 1 
+                AND slot NOT IN (
+                    SELECT slot FROM appointments 
+                    WHERE therapist_id = ? AND status = 'booked'
+                )
+                ORDER BY slot ASC
+            """
+            
+            cur = conn.cursor()
+            cur.execute(query, (therapist_id, therapist_id))
+            slots = cur.fetchall()
+            
+            # Filter by preferred time if specified
+            if preferred_time and slots:
+                filtered_slots = []
+                for slot in slots:
+                    slot_time = slot['slot']
+                    if self._matches_preferred_time(slot_time, preferred_time):
+                        filtered_slots.append(slot)
+                return filtered_slots
+            
+            return slots
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error getting available slots: {e}")
+            return []
+        finally:
+            conn.close()
+    
+    def _matches_preferred_time(self, slot_time, preferred_time):
+        """Check if slot matches preferred time"""
+        try:
+            dt = datetime.strptime(slot_time, "%Y-%m-%d %H:%M")
+            hour = dt.hour
+            
+            preferred_time = preferred_time.lower()
+            if "morning" in preferred_time and 6 <= hour < 12:
+                return True
+            elif "afternoon" in preferred_time and 12 <= hour < 18:
+                return True
+            elif "evening" in preferred_time and 18 <= hour < 22:
+                return True
+            
+            return False
+        except ValueError:
+            return False
+    
+    def book_appointment(self, therapist_id, slot, user_id, notes=""):
+        """Book an appointment"""
+        conn = self.get_connection()
+        try:
+            cur = conn.cursor()
+            
+            # Check if slot is still available
+            cur.execute("""
+                SELECT 1 FROM availability 
+                WHERE therapist_id = ? AND slot = ? AND is_available = 1
+            """, (therapist_id, slot))
+            
+            if not cur.fetchone():
+                return {"success": False, "message": "Slot is no longer available"}
+            
+            # Check if appointment already exists
+            cur.execute("""
+                SELECT 1 FROM appointments 
+                WHERE therapist_id = ? AND slot = ? AND status = 'booked'
+            """, (therapist_id, slot))
+            
+            if cur.fetchone():
+                return {"success": False, "message": "Appointment already booked"}
+            
+            # Book the appointment
+            cur.execute("""
+                INSERT INTO appointments (therapist_id, user_id, slot, notes)
+                VALUES (?, ?, ?, ?)
+            """, (therapist_id, user_id, slot, notes))
+            
+            conn.commit()
+            return {"success": True, "appointment_id": cur.lastrowid}
+            
+        except sqlite3.Error as e:
+            logger.error(f"Error booking appointment: {e}")
+            return {"success": False, "message": f"Database error: {e}"}
+        finally:
+            conn.close()
 
 
 def appointment_booking_node(state):
@@ -15,17 +158,36 @@ def appointment_booking_node(state):
     Returns state with next_action to control flow
     """
     
+    # Initialize database manager
+    db_manager = DatabaseManager()
+    
     # Check what stage we're at
     current_stage = state.get("appointment_stage", "initial")
     
-    if current_stage == "initial":
-        return _offer_appointment(state)
-    elif current_stage == "user_responded":
-        return _process_user_response(state)
-    elif current_stage == "booking_confirmed":
-        return _complete_booking(state)
-    else:
-        return {**state, "appointment_status": "Unknown stage", "next_action": "continue"}
+    try:
+        if current_stage == "initial":
+            return _offer_appointment(state)
+        elif current_stage == "user_responded":
+            return _process_user_response(state, db_manager)
+        elif current_stage == "collecting_info":
+            return _collect_additional_info(state, db_manager)
+        elif current_stage == "confirm_booking":
+            return _confirm_booking(state, db_manager)
+        elif current_stage == "booking_confirmed":
+            return _complete_booking(state, db_manager)
+        elif current_stage == "awaiting_final_confirmation":
+            return _handle_final_confirmation(state, db_manager)
+        else:
+            return {**state, "appointment_status": "Unknown stage", "next_action": "continue"}
+            
+    except Exception as e:
+        logger.error(f"Error in appointment booking node: {e}")
+        return {
+            **state,
+            "appointment_status": "I'm sorry, there was an error processing your appointment request. Please try again.",
+            "agent_output": "I'm sorry, there was an error processing your appointment request. Please try again.",
+            "next_action": "continue"
+        }
 
 
 def _offer_appointment(state):
@@ -34,26 +196,30 @@ def _offer_appointment(state):
     if isinstance(emotions, list):
         emotions = " ".join(str(e) for e in emotions)
     emotions = emotions.lower()
+    
     trigger_emotions = [
         "anxiety", "depression", "grief", "loneliness", "stress", "trauma",
-        "sadness", "hopelessness", "overwhelm", "panic", "despair", "worry", "fear", "loss", "isolation"
+        "sadness", "hopelessness", "overwhelm", "panic", "despair", "worry", 
+        "fear", "loss", "isolation", "burnout", "confused", "angry"
     ]
-    # --- Memory context ---
-    memory = state.get("memory", [])
-    memory_text = "\n".join(
-        f"User: {turn.get('user_input','')}, Agent: {turn.get('agent_output','')}" for turn in memory if turn.get("user_input") and turn.get("agent_output")
-    )
-    memory_summary = f"\n\nRecent conversation:\n{memory_text}" if memory_text else ""
+    
+    # Build conversation context
+    context = _build_conversation_context(state)
     
     if any(e in emotions for e in trigger_emotions):
-        offer = "Based on what you're experiencing, I think speaking with a therapist could be helpful. Would you like me to book an appointment for you?"
-        offer_with_memory = offer + memory_summary
+        offer = (
+            "Based on what you're experiencing, I think speaking with a therapist could be helpful. "
+            "Would you like me to help you book an appointment?"
+        )
+        
+        full_response = f"{offer}{context}"
+        
         return {
             **state,
             "appointment_stage": "waiting_for_response",
-            "appointment_offer": offer_with_memory,
-            "agent_output": offer_with_memory,
-            "next_action": "wait_for_input",  # This tells the agent to stop and wait
+            "appointment_offer": offer,
+            "agent_output": full_response,
+            "next_action": "wait_for_input",
             "expected_input": "appointment_response"
         }
     
@@ -64,20 +230,18 @@ def _offer_appointment(state):
     }
 
 
-def _process_user_response(state):
+def _process_user_response(state, db_manager):
     """Step 2: Process user's response to appointment offer"""
-    appointment_response = state.get("appointment_response", "").lower()
-    emotions = state.get("emotions", "")
-    if isinstance(emotions, list):
-        emotions = " ".join(str(e) for e in emotions)
-    emotions = emotions.lower()
+    user_input = state.get("user_input", "").lower()
     
-    if "yes" in appointment_response or "sure" in appointment_response or "ok" in appointment_response:
-        # Check if we have all required information
+    if any(word in user_input for word in ["yes", "sure", "ok", "yeah", "please"]):
+        # Check if we have required information
         required_info = _validate_booking_info(state)
         
         if required_info["missing"]:
-            msg = f"Great! I need some additional information: {', '.join(required_info['missing'])}"
+            missing_items = ", ".join(required_info["missing"])
+            msg = f"Great! I'd like to help you find the right therapist. I need some information: {missing_items}. Let's start - what would you prefer?"
+            
             return {
                 **state,
                 "appointment_stage": "collecting_info",
@@ -87,19 +251,12 @@ def _process_user_response(state):
                 "expected_input": "booking_details"
             }
         else:
-            # Instead of booking immediately, ask for confirmation
-            msg = "I have all the information I need. Would you like to confirm and book the appointment now?"
-            return {
-                **state,
-                "appointment_stage": "confirm_booking",
-                "next_action": "wait_for_input",
-                "appointment_status": msg,
-                "agent_output": msg,
-                "expected_input": "booking_confirmation"
-            }
+            return _find_and_present_options(state, db_manager)
     
-    elif "no" in appointment_response:
-        msg = "That's okay. I'm here if you change your mind or need other support."
+    elif any(word in user_input for word in ["no", "not now", "maybe later"]):
+        context = _build_conversation_context(state)
+        msg = f"That's completely okay. I'm here whenever you're ready or need other support.{context}"
+        
         return {
             **state,
             "appointment_stage": "declined",
@@ -109,7 +266,7 @@ def _process_user_response(state):
         }
     
     else:
-        msg = "I'm not sure if you'd like to book an appointment. Could you please say 'yes' or 'no'?"
+        msg = "I'm not sure if you'd like to book an appointment. Could you please let me know - yes or no?"
         return {
             **state,
             "appointment_stage": "waiting_for_response",
@@ -120,30 +277,50 @@ def _process_user_response(state):
         }
 
 
-def _complete_booking(state):
-    """Step 3: Actually book the appointment"""
-    conn = sqlite3.connect("data/therapist.db")
-    cur = conn.cursor()
-
-    # Get user preferences or use defaults
-    emotion = state["emotions"]
-    if isinstance(emotion, list):
-        emotion = " ".join(str(e) for e in emotion)
-    emotion = emotion.strip().lower()
-    preferred_time = state.get("preferred_time", None)
-    preferred_therapist = state.get("preferred_therapist", None)
+def _collect_additional_info(state, db_manager):
+    """Collect missing information for booking"""
+    user_input = state.get("user_input", "")
     
-    # Match therapists based on criteria
-    if preferred_therapist:
-        cur.execute("SELECT id, name FROM therapists WHERE name LIKE ?", (f"%{preferred_therapist}%",))
+    # Update state with new information
+    updated_state = _extract_booking_info(state, user_input)
+    
+    # Check if we have enough information now
+    required_info = _validate_booking_info(updated_state)
+    
+    if required_info["missing"]:
+        missing_items = ", ".join(required_info["missing"])
+        msg = f"Thanks! I still need: {missing_items}. Could you provide this information?"
+        
+        return {
+            **updated_state,
+            "appointment_stage": "collecting_info",
+            "next_action": "wait_for_input",
+            "appointment_status": msg,
+            "agent_output": msg,
+            "expected_input": "booking_details"
+        }
     else:
-        cur.execute("SELECT id, name FROM therapists WHERE specialty LIKE ?", (f"%{emotion}%",))
-    
-    candidates = cur.fetchall()
+        return _find_and_present_options(updated_state, db_manager)
 
-    if not candidates:
-        conn.close()
-        msg = "I couldn't find a therapist matching your needs. Would you like me to show you all available therapists?"
+
+def _find_and_present_options(state, db_manager):
+    """Find therapists and present options to user"""
+    emotions = state.get("emotions", "")
+    if isinstance(emotions, list):
+        emotions = " ".join(str(e) for e in emotions)
+    
+    location = state.get("location", "")
+    online_preferred = "online" in location.lower() if location else False
+    
+    # Find therapists
+    therapists = db_manager.find_therapists(
+        specialty=emotions,
+        location=location if not online_preferred else None,
+        online_preferred=online_preferred
+    )
+    
+    if not therapists:
+        msg = "I couldn't find therapists matching your specific criteria. Would you like me to show you all available therapists?"
         return {
             **state,
             "appointment_stage": "no_match",
@@ -152,69 +329,70 @@ def _complete_booking(state):
             "next_action": "wait_for_input",
             "expected_input": "show_all_therapists"
         }
-
-    # Find best available slot
-    best_match = None
-    best_slot = None
-    earliest_time = datetime.max
-
-    for therapist_id, name in candidates:
-        cur.execute("SELECT slot FROM availability WHERE therapist_id = ? ORDER BY slot ASC", (therapist_id,))
-        slots = cur.fetchall()
-        
-        for (slot,) in slots:
-            dt_slot = datetime.strptime(slot, "%Y-%m-%d %H:%M")
-            
-            # If user has preferred time, try to match it
-            if preferred_time:
-                # Simple time matching logic - you can make this more sophisticated
-                if preferred_time.lower() in slot.lower():
-                    best_match = (therapist_id, name)
-                    best_slot = slot
-                    break
-            elif dt_slot < earliest_time:
-                earliest_time = dt_slot
-                best_match = (therapist_id, name)
-                best_slot = slot
-
-    if not best_match:
-        conn.close()
-        msg = "No available slots match your preferences. Would you like to see other available times?"
-        return {
-            **state,
-            "appointment_stage": "no_slots",
-            "appointment_status": msg,
-            "agent_output": msg,
-            "next_action": "wait_for_input",
-            "expected_input": "alternative_times"
-        }
-
-    # --- Memory context ---
-    memory = state.get("memory", [])
-    memory_text = "\n".join(
-        f"User: {turn.get('user_input','')}, Agent: {turn.get('agent_output','')}" for turn in memory if turn.get("user_input") and turn.get("agent_output")
-    )
-    memory_summary = f"\n\nRecent conversation:\n{memory_text}" if memory_text else ""
-    # Instead of booking, ask for confirmation
-    msg = f"I found a slot with {best_match[1]} on {best_slot}. Would you like to confirm this booking?{memory_summary}"
+    
+    # Present options
+    options_text = "Here are some therapists I found for you:\n"
+    for i, therapist in enumerate(therapists[:3], 1):  # Show top 3
+        options_text += f"{i}. {therapist['name']} - {therapist['specialty']} (Rating: {therapist['rating']:.1f})\n"
+    
+    context = _build_conversation_context(state)
+    msg = f"{options_text}\nWhich therapist would you prefer, or would you like more information about any of them?{context}"
+    
     return {
         **state,
-        "appointment_stage": "awaiting_final_confirmation",
+        "appointment_stage": "therapist_selection",
+        "available_therapists": therapists,
         "appointment_status": msg,
         "agent_output": msg,
-        "booked_therapist": best_match[1],
-        "booked_slot": best_slot,
         "next_action": "wait_for_input",
-        "expected_input": "final_booking_confirmation"
+        "expected_input": "therapist_selection"
     }
+
+
+def _build_conversation_context(state):
+    """Build conversation context for continuity"""
+    memory = state.get("memory", [])
+    if not memory:
+        return ""
+    
+    # Get recent relevant exchanges
+    recent_exchanges = []
+    for turn in memory[-3:]:  # Last 3 exchanges
+        if turn.get("user_input") and turn.get("agent_output"):
+            recent_exchanges.append(f"You: {turn['user_input'][:50]}...")
+    
+    if recent_exchanges:
+        return f"\n\nBased on our conversation: {' | '.join(recent_exchanges)}"
+    return ""
+
+
+def _extract_booking_info(state, user_input):
+    """Extract booking information from user input"""
+    updated_state = state.copy()
+    user_input_lower = user_input.lower()
+    
+    # Extract time preferences
+    if any(time in user_input_lower for time in ["morning", "afternoon", "evening"]):
+        for time_pref in ["morning", "afternoon", "evening"]:
+            if time_pref in user_input_lower:
+                updated_state["preferred_time"] = time_pref
+                break
+    
+    # Extract location preferences
+    if any(loc in user_input_lower for loc in ["online", "virtual", "remote"]):
+        updated_state["location"] = "online"
+    elif any(loc in user_input_lower for loc in ["in-person", "office", "clinic"]):
+        updated_state["location"] = "in-person"
+    
+    return updated_state
 
 
 def _validate_booking_info(state):
     """Check what information we have and what we need"""
     required_fields = {
-        "emotions": "your current emotional state",
-        "preferred_time": "your preferred appointment time (morning/afternoon/evening)",
-        "location": "your location or if you prefer online sessions"
+        "emotions": "your current concerns or what you'd like to work on",
+        "preferred_time": "your preferred time (morning/afternoon/evening)",
+        "location": "whether you prefer online or in-person sessions"
     }
     
     missing = []
@@ -231,3 +409,21 @@ def _validate_booking_info(state):
         "available": available,
         "is_complete": len(missing) == 0
     }
+
+
+def _confirm_booking(state, db_manager):
+    """Confirm booking details with user"""
+    # This would be implemented based on your specific flow
+    pass
+
+
+def _complete_booking(state, db_manager):
+    """Complete the actual booking"""
+    # This would be implemented based on your specific flow
+    pass
+
+
+def _handle_final_confirmation(state, db_manager):
+    """Handle final booking confirmation"""
+    # This would be implemented based on your specific flow
+    pass

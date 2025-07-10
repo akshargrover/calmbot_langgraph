@@ -283,7 +283,7 @@ def route_state(state: Dict) -> str:
     
     route_mapping = {
         "crisis_handled": "crisis",
-        "appointment_processed": "appointment",
+        "appointment_processed": "appointment",  # Changed from appointment_processed
         "self_care_provided": "self_care",
         "wait_for_input": "wait_for_input",
         "end": "end_conversation"
@@ -316,19 +316,37 @@ def handle_user_input(state: Dict) -> Dict:
         }
     
     elif expected_input == "appointment_response":
-        # Fix: set appointment_stage to user_responded so the booking node processes the reply
         return {
             **state,
             "text": text_history,
             "appointment_response": current_input,
-            "appointment_stage": "user_responded",
-            "current_input": "",
+            "appointment_stage": "waiting_for_response",  # Keep the stage consistent
+            "current_input": current_input,  # Keep current_input for processing
             "next_action": "continue",
             "expected_input": ""
         }
     
     elif expected_input == "booking_details":
-        return handle_booking_details(state, current_input)
+        return {
+            **state,
+            "text": text_history,
+            "booking_details": current_input,
+            "appointment_stage": "collecting_info",
+            "current_input": current_input,
+            "next_action": "continue",
+            "expected_input": ""
+        }
+    
+    elif expected_input == "final_booking_confirmation":
+        return {
+            **state,
+            "text": text_history,
+            "final_booking_confirmation": current_input,
+            "appointment_stage": "awaiting_final_confirmation",
+            "current_input": current_input,
+            "next_action": "continue",
+            "expected_input": ""
+        }
     
     return {
         **state,
@@ -385,13 +403,17 @@ def handle_booking_details(state: Dict, user_input: str) -> Dict:
 def input_flow_condition(state: Dict) -> str:
     """Conditional routing for input flow"""
     next_action = state.get("next_action", "continue")
-    if next_action == "wait_for_input":
+    expected_input = state.get("expected_input")
+    
+    # If we're expecting input and don't have it, wait
+    if expected_input and not state.get("current_input"):
+        return "wait_for_input"
+    elif next_action == "wait_for_input":
         return "wait_for_input"
     elif next_action == "continue":
         return "continue"
     else:
         return "end"
-
 # Standalone crisis checker node for pre-emotion detection use in the graph
 
 def crisis_checker_node(state: Dict) -> Dict:
