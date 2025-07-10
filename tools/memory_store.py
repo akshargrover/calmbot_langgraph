@@ -29,18 +29,32 @@ def store_mood(state):
 
 def store_user_turn(state):
     user_id = state.get("user_id", "default_user")
+    if not isinstance(user_id, str):
+        # If it's a list, take the first string element, or fallback to 'default_user'
+        if isinstance(user_id, list) and user_id:
+            user_id = str(user_id[0])
+        else:
+            user_id = "default_user"
+    user_id = user_id.replace("/", "_").replace("\\", "_")  # sanitize for filesystem
     log_dir = "data/user_logs"
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, f"{user_id}.jsonl")
 
+    def safe_str(val):
+        # Convert HumanMessage or other objects to string
+        if hasattr(val, "content"):
+            return str(val.content)
+        if isinstance(val, list):
+            return [safe_str(v) for v in val]
+        return str(val) if val is not None else ""
+
     turn = {
         "timestamp": datetime.now().isoformat(),
-        "user_input": state.get("current_input"),
-        "agent_output": state.get("agent_output"),
-        "emotions": state.get("emotions"),
-        "details": state.get("details"),
-        "next_action": state.get("next_action"),
-        "suggestion" : state.get("suggestion")
+        "user_input": safe_str(state.get("current_input")),
+        "agent_output": safe_str(state.get("agent_output")),
+        "emotions": safe_str(state.get("emotions")),
+        "details": safe_str(state.get("details")),
+        "suggestion": safe_str(state.get("suggestion"))
     }
     with open(log_path, "a", encoding="utf-8") as f:
         f.write(json.dumps(turn) + "\n")

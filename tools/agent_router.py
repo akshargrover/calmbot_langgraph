@@ -152,7 +152,10 @@ class UnifiedRouter:
     def validate_input(self, state: Dict) -> Tuple[bool, str]:
         """Validate if we have sufficient information to proceed"""
         text = self.extract_text_from_state(state)
-        emotions = (state.get("emotions") or "").strip().lower()
+        emotions = state.get("emotions") or ""
+        if isinstance(emotions, list):
+            emotions = " ".join(str(e) for e in emotions)
+        emotions = emotions.strip().lower()
         
         if len(text) < 3:
             return False, "I'd like to understand better. Can you share more about what's on your mind?"
@@ -168,7 +171,10 @@ class UnifiedRouter:
     def check_crisis(self, state: Dict) -> bool:
         """Check if user is in crisis situation"""
         text = self.extract_text_from_state(state)
-        emotions = (state.get("emotions") or "").lower()
+        emotions = state.get("emotions") or ""
+        if isinstance(emotions, list):
+            emotions = " ".join(str(e) for e in emotions)
+        emotions = emotions.strip().lower()
         
         combined_text = f"{text} {emotions}"
         return any(keyword in combined_text for keyword in self.crisis_keywords)
@@ -176,8 +182,10 @@ class UnifiedRouter:
     def check_needs_therapy(self, state: Dict) -> bool:
         """Check if user might benefit from therapy"""
         text = self.extract_text_from_state(state)
-        emotions = (state.get("emotions") or "").lower()
-        
+        emotions = state.get("emotions") or ""
+        if isinstance(emotions, list):
+            emotions = " ".join(str(e) for e in emotions)
+        emotions = emotions.strip().lower()        
         therapy_mentions = ["therapy", "therapist", "appointment", "counseling", "counselor"]
         if any(mention in text for mention in therapy_mentions):
             return True
@@ -186,16 +194,27 @@ class UnifiedRouter:
     
     def determine_route(self, state: Dict) -> str:
         """Determine which agent should handle the request"""
+        # Only require emotion detection for self-care or crisis if emotion is missing
+        text = self.extract_text_from_state(state)
+        emotions = state.get("emotions") or ""
+        if isinstance(emotions, list):
+            emotions = " ".join(str(e) for e in emotions)
+        emotions = emotions.strip().lower()
         is_valid, _ = self.validate_input(state)
         if not is_valid:
             return "wait_for_input"
-        
-        if self.check_crisis(state):
-            return "crisis"
-        
+
+        # If appointment is directly requested, route to appointment (even if emotion is missing)
         if self.check_needs_therapy(state):
             return "appointment"
-        
+
+        # If self-care or crisis is needed but emotion is missing, trigger emotion detection
+        if (not emotions or emotions in self.vague_responses):
+            return "detect_emotion"
+
+        if self.check_crisis(state):
+            return "crisis"
+
         return "self_care"
     
     def route(self, state: Dict) -> Dict:

@@ -30,19 +30,29 @@ def appointment_booking_node(state):
 
 def _offer_appointment(state):
     """Step 1: Check if user needs appointment and offer it"""
-    emotions = state.get("emotions", "").lower()
+    emotions = state.get("emotions", "")
+    if isinstance(emotions, list):
+        emotions = " ".join(str(e) for e in emotions)
+    emotions = emotions.lower()
     trigger_emotions = [
         "anxiety", "depression", "grief", "loneliness", "stress", "trauma",
         "sadness", "hopelessness", "overwhelm", "panic", "despair", "worry", "fear", "loss", "isolation"
     ]
+    # --- Memory context ---
+    memory = state.get("memory", [])
+    memory_text = "\n".join(
+        f"User: {turn.get('user_input','')}, Agent: {turn.get('agent_output','')}" for turn in memory if turn.get("user_input") and turn.get("agent_output")
+    )
+    memory_summary = f"\n\nRecent conversation:\n{memory_text}" if memory_text else ""
     
     if any(e in emotions for e in trigger_emotions):
         offer = "Based on what you're experiencing, I think speaking with a therapist could be helpful. Would you like me to book an appointment for you?"
+        offer_with_memory = offer + memory_summary
         return {
             **state,
             "appointment_stage": "waiting_for_response",
-            "appointment_offer": offer,
-            "agent_output": offer,
+            "appointment_offer": offer_with_memory,
+            "agent_output": offer_with_memory,
             "next_action": "wait_for_input",  # This tells the agent to stop and wait
             "expected_input": "appointment_response"
         }
@@ -57,6 +67,10 @@ def _offer_appointment(state):
 def _process_user_response(state):
     """Step 2: Process user's response to appointment offer"""
     appointment_response = state.get("appointment_response", "").lower()
+    emotions = state.get("emotions", "")
+    if isinstance(emotions, list):
+        emotions = " ".join(str(e) for e in emotions)
+    emotions = emotions.lower()
     
     if "yes" in appointment_response or "sure" in appointment_response or "ok" in appointment_response:
         # Check if we have all required information
@@ -112,7 +126,10 @@ def _complete_booking(state):
     cur = conn.cursor()
 
     # Get user preferences or use defaults
-    emotion = state["emotions"].split(",")[0].strip().lower()
+    emotion = state["emotions"]
+    if isinstance(emotion, list):
+        emotion = " ".join(str(e) for e in emotion)
+    emotion = emotion.strip().lower()
     preferred_time = state.get("preferred_time", None)
     preferred_therapist = state.get("preferred_therapist", None)
     
@@ -172,8 +189,14 @@ def _complete_booking(state):
             "expected_input": "alternative_times"
         }
 
+    # --- Memory context ---
+    memory = state.get("memory", [])
+    memory_text = "\n".join(
+        f"User: {turn.get('user_input','')}, Agent: {turn.get('agent_output','')}" for turn in memory if turn.get("user_input") and turn.get("agent_output")
+    )
+    memory_summary = f"\n\nRecent conversation:\n{memory_text}" if memory_text else ""
     # Instead of booking, ask for confirmation
-    msg = f"I found a slot with {best_match[1]} on {best_slot}. Would you like to confirm this booking?"
+    msg = f"I found a slot with {best_match[1]} on {best_slot}. Would you like to confirm this booking?{memory_summary}"
     return {
         **state,
         "appointment_stage": "awaiting_final_confirmation",

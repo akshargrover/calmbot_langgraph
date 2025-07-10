@@ -61,9 +61,18 @@ def suggest_care(state):
         "overwhelm": "Break down your tasks into smaller steps. Focus on just one thing at a time.",
         "other": "Take a moment to check in with yourself and acknowledge how you're feeling."
     }
-    emotions = (state.get("emotions") or "").lower()
+    emotions = state.get("emotions") or ""
+    if isinstance(emotions, list):
+        emotions = " ".join(str(e) for e in emotions)
+    emotions = emotions.lower()
     primary_emotion = emotions.split(",")[0].strip() if "," in emotions else emotions
     basic = basic_suggestions.get(primary_emotion, basic_suggestions["other"])
+
+    # --- Memory context ---
+    memory = state.get("memory", [])
+    memory_text = "\n".join(
+        f"User: {turn.get('user_input','')}\nAgent: {turn.get('agent_output','')}" for turn in memory if turn.get("user_input") and turn.get("agent_output")
+    )
 
     # --- RAG suggestion logic ---
     rag_suggestion = None
@@ -78,7 +87,8 @@ def suggest_care(state):
             allow_dangerous_deserialization=True
         )
         user_input = state.get("text", "")
-        search_query = f"{emotions} {user_input}"
+        # Add memory context to the search query
+        search_query = f"{memory_text}\n{emotions} {user_input}" if memory_text else f"{emotions} {user_input}"
         docs = vectorstore.similarity_search(search_query, k=3)
         if not docs:
             docs = vectorstore.similarity_search(emotions, k=3)
@@ -89,6 +99,9 @@ def suggest_care(state):
                 google_api_key=os.getenv("GEMINI_API_KEY")
             )
             prompt = f"""
+            Conversation so far:
+            {memory_text}
+
             Based on this self-care content:
             {content}
             User is feeling: {emotions}
@@ -108,7 +121,7 @@ def suggest_care(state):
 
     # --- Combine and return ---
     if rag_suggestion:
-        combined = f"\nPersonalized suggestion: {rag_suggestion}"
+        combined = f"Personalized suggestion: {rag_suggestion}"
     else:
         combined = f"Basic self-care tip: {basic}"
     return {

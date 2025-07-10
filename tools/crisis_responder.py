@@ -1,4 +1,8 @@
 def crisis_responder(state):
+    emotions = state.get("emotions", "")
+    if isinstance(emotions, list):
+        emotions = " ".join(str(e) for e in emotions)
+    emotions = emotions.lower()
     crisis_msg = (
         "I'm really sorry you're feeling this way. You're not alone — there are people who care about you and want to help.\n\n"
         "💙 Please reach out to someone you trust or contact a mental health professional.\n\n"
