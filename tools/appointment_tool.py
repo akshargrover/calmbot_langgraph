@@ -148,44 +148,103 @@ class DatabaseManager:
         finally:
             conn.close()
 
+# New: Function to generate context-aware input prompt for appointment phase
+
+def get_appointment_input_prompt(state):
+    """
+    Returns a context-aware prompt string for the user during the appointment phase.
+    """
+    stage = state.get("appointment_stage", "")
+    expected_input = state.get("expected_input", "")
+    available_therapists = state.get("available_therapists", [])
+    available_slots = state.get("available_slots", [])
+
+    # Custom prompts for each stage/expected input
+    if expected_input == "appointment_response":
+        return "Would you like to book an appointment with a therapist? (yes/no)"
+    elif expected_input == "booking_details":
+        return "Please provide your preferences: preferred time (morning/afternoon/evening) and whether you prefer online or in-person sessions."
+    elif expected_input == "therapist_selection":
+        if available_therapists:
+            options = "\n".join([
+                f"{i+1}. {t['name']} - {t['specialty']} (Rating: {t['rating']:.1f})"
+                for i, t in enumerate(available_therapists[:3])
+            ])
+            return f"Which therapist would you like to choose? Please reply with the number or name.\n{options}"
+        else:
+            return "Please select a therapist by number or name."
+    elif expected_input == "slot_selection":
+        if available_slots:
+            slots = "\n".join([
+                f"{i+1}. {slot['slot']}" for i, slot in enumerate(available_slots[:5])
+            ])
+            return f"Which time slot would you prefer? Please reply with the number.\n{slots}"
+        else:
+            return "Please specify your preferred time slot."
+    elif expected_input == "final_booking_confirmation":
+        return "Do you confirm this booking? (yes/no)"
+    # Fallbacks for stages
+    elif stage == "collecting_info":
+        return "Please provide the requested information to help book your appointment."
+    elif stage == "therapist_selection":
+        return "Please select a therapist by number or name."
+    elif stage == "slot_selection":
+        return "Please select a time slot by number."
+    # Default fallback
+    return "Please provide the requested information."
+
 
 def appointment_booking_node(state):
     """
-    Unified appointment booking node that handles:
-    1. Offering appointments based on emotions
-    2. Actual booking process 
-    
-    Returns state with next_action to control flow
+    Enhanced appointment booking node with proper input handling
     """
-    
     # Initialize database manager
     db_manager = DatabaseManager()
     
-    # Check what stage we're at
+    # Get current stage and user input
     current_stage = state.get("appointment_stage", "initial")
+    user_input = state.get("user_input", "")
+    
+    # Log for debugging
+    logger.info(f"Appointment booking - Stage: {current_stage}, Input: {user_input}")
     
     try:
         if current_stage == "initial":
             return _offer_appointment(state)
+        
         elif current_stage == "user_responded":
             return _process_user_response(state, db_manager)
+        
         elif current_stage == "collecting_info":
             return _collect_additional_info(state, db_manager)
+        
+        elif current_stage == "therapist_selected":
+            return _handle_therapist_selection(state, db_manager)
+        
         elif current_stage == "confirm_booking":
             return _confirm_booking(state, db_manager)
-        elif current_stage == "booking_confirmed":
-            return _complete_booking(state, db_manager)
+        
         elif current_stage == "awaiting_final_confirmation":
             return _handle_final_confirmation(state, db_manager)
+        
         else:
-            return {**state, "appointment_status": "Unknown stage", "next_action": "continue"}
+            # Unknown stage, provide helpful message
+            return {
+                **state,
+                "appointment_status": "I'm not sure where we are in the booking process. Would you like to start over?",
+                "agent_output": "I'm not sure where we are in the booking process. Would you like to start over?",
+                "appointment_stage": "initial",
+                "next_action": "wait_for_input",
+                "expected_input": "appointment_response"
+            }
             
     except Exception as e:
         logger.error(f"Error in appointment booking node: {e}")
         return {
             **state,
-            "appointment_status": "I'm sorry, there was an error processing your appointment request. Please try again.",
-            "agent_output": "I'm sorry, there was an error processing your appointment request. Please try again.",
+            "appointment_status": "I'm sorry, there was an error. Let me help you start the appointment booking process again.",
+            "agent_output": "I'm sorry, there was an error. Let me help you start the appointment booking process again.",
+            "appointment_stage": "initial",
             "next_action": "continue"
         }
 
@@ -231,10 +290,21 @@ def _offer_appointment(state):
 
 
 def _process_user_response(state, db_manager):
-    """Step 2: Process user's response to appointment offer"""
-    user_input = state.get("user_input", "").lower()
+    """Enhanced user response processing"""
+    user_input = state.get("user_input", "").lower().strip()
     
-    if any(word in user_input for word in ["yes", "sure", "ok", "yeah", "please"]):
+    if not user_input:
+        return {
+            **state,
+            "appointment_status": "I didn't receive your response. Would you like to book an appointment? Please say yes or no.",
+            "agent_output": "I didn't receive your response. Would you like to book an appointment? Please say yes or no.",
+            "appointment_stage": "waiting_for_response",
+            "next_action": "wait_for_input",
+            "expected_input": "appointment_response"
+        }
+    
+    # Positive responses
+    if any(word in user_input for word in ["yes", "sure", "ok", "yeah", "please", "book", "schedule"]):
         # Check if we have required information
         required_info = _validate_booking_info(state)
         
@@ -245,15 +315,16 @@ def _process_user_response(state, db_manager):
             return {
                 **state,
                 "appointment_stage": "collecting_info",
-                "next_action": "wait_for_input",
                 "appointment_status": msg,
                 "agent_output": msg,
+                "next_action": "wait_for_input",
                 "expected_input": "booking_details"
             }
         else:
             return _find_and_present_options(state, db_manager)
     
-    elif any(word in user_input for word in ["no", "not now", "maybe later"]):
+    # Negative responses
+    elif any(word in user_input for word in ["no", "not now", "maybe later", "not interested"]):
         context = _build_conversation_context(state)
         msg = f"That's completely okay. I'm here whenever you're ready or need other support.{context}"
         
@@ -266,6 +337,7 @@ def _process_user_response(state, db_manager):
         }
     
     else:
+        # Unclear response
         msg = "I'm not sure if you'd like to book an appointment. Could you please let me know - yes or no?"
         return {
             **state,
@@ -275,6 +347,96 @@ def _process_user_response(state, db_manager):
             "next_action": "wait_for_input",
             "expected_input": "appointment_response"
         }
+
+def _handle_therapist_selection(state, db_manager):
+    """Handle therapist selection from user"""
+    user_input = state.get("user_input", "").lower().strip()
+    available_therapists = state.get("available_therapists", [])
+    
+    if not available_therapists:
+        return {
+            **state,
+            "appointment_status": "I don't have the therapist options available. Let me search again.",
+            "agent_output": "I don't have the therapist options available. Let me search again.",
+            "appointment_stage": "collecting_info",
+            "next_action": "continue"
+        }
+    
+    # Try to parse therapist selection
+    selected_therapist = None
+    
+    # Check for number selection (1, 2, 3, etc.)
+    if user_input.isdigit():
+        try:
+            index = int(user_input) - 1
+            if 0 <= index < len(available_therapists):
+                selected_therapist = available_therapists[index]
+        except ValueError:
+            pass
+    
+    # Check for name selection
+    if not selected_therapist:
+        for therapist in available_therapists:
+            if therapist['name'].lower() in user_input:
+                selected_therapist = therapist
+                break
+    
+    if selected_therapist:
+        # Get available slots
+        slots = db_manager.get_available_slots(
+            selected_therapist['id'], 
+            state.get("preferred_time")
+        )
+        
+        if slots:
+            slots_text = "Available slots:\n"
+            for i, slot in enumerate(slots[:5], 1):  # Show first 5 slots
+                slots_text += f"{i}. {slot['slot']}\n"
+            
+            msg = f"Great choice! {selected_therapist['name']} is available at these times:\n{slots_text}\nWhich slot would you prefer?"
+            
+            return {
+                **state,
+                "selected_therapist": selected_therapist,
+                "available_slots": slots,
+                "appointment_stage": "slot_selection",
+                "appointment_status": msg,
+                "agent_output": msg,
+                "next_action": "wait_for_input",
+                "expected_input": "slot_selection"
+            }
+        else:
+            msg = f"I'm sorry, {selected_therapist['name']} doesn't have available slots matching your preferences. Would you like to see other therapists?"
+            return {
+                **state,
+                "appointment_stage": "no_slots_available",
+                "appointment_status": msg,
+                "agent_output": msg,
+                "next_action": "wait_for_input",
+                "expected_input": "therapist_selection"
+            }
+    else:
+        # Invalid selection
+        msg = "I couldn't understand your selection. Please choose a therapist by number (1, 2, 3) or by name."
+        return {
+            **state,
+            "appointment_stage": "therapist_selection",
+            "appointment_status": msg,
+            "agent_output": msg,
+            "next_action": "wait_for_input",
+            "expected_input": "therapist_selection"
+        }
+
+# Add debugging function
+def debug_appointment_state(state):
+    """Debug function to log appointment state"""
+    logger.info(f"Appointment Debug:")
+    logger.info(f"  Stage: {state.get('appointment_stage')}")
+    logger.info(f"  Next Action: {state.get('next_action')}")
+    logger.info(f"  Expected Input: {state.get('expected_input')}")
+    logger.info(f"  User Input: {state.get('user_input')}")
+    logger.info(f"  Current Input: {state.get('current_input')}")
+    return state
 
 
 def _collect_additional_info(state, db_manager):

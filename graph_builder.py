@@ -4,7 +4,7 @@ from tools.emotion_detector import detect_emotion
 from tools.memory_store import fetch_user_history, store_user_turn
 from tools.selfcare_rag_suggester import suggest_care
 from tools.crisis_responder import crisis_responder 
-from tools.appointment_tool import appointment_booking_node
+from tools.appointment_tool import appointment_booking_node, get_appointment_input_prompt
 from tools.agent_router import (
     smart_unified_router, 
     route_state,
@@ -74,6 +74,52 @@ def router_node(state):
         result = store_user_turn(result)
     return result
 
+# UserInput node for appointment loop
+def user_input_node(state):
+    """
+    Enhanced user input node that properly handles user responses
+    during appointment booking flow
+    """
+    current_input = state.get("current_input", "")
+    expected_input = state.get("expected_input", "")
+    if not current_input:
+        # Use the new appointment input prompt function
+        prompt = get_appointment_input_prompt(state)
+        return {
+            **state,
+            "next_action": "wait_for_input",
+            "agent_output": prompt
+        }
+    # Use the input and continue
+    return {
+        **state,
+        "user_input": current_input,  # Pass new input to the next node
+        "current_input": "",          # Clear after use
+        "next_action": "continue_appointment"
+    }
+    
+def appointment_flow_condition(state):
+    """
+    Improved conditional routing for appointment booking flow
+    """
+    appointment_stage = state.get("appointment_stage", "")
+    next_action = state.get("next_action", "")
+    
+    # If we're waiting for input, go to UserInput node
+    if next_action == "wait_for_input":
+        return "user_input"
+    
+    # If appointment is complete, end the flow
+    if appointment_stage in ["complete", "declined", "booking_confirmed"]:
+        return "complete"
+    
+    # If we have input to process, continue with appointment booking
+    if next_action == "continue_appointment":
+        return "appointment"
+    
+    # Default to ending
+    return "complete"
+
 def build_graph():
     graph = StateGraph(GraphState)
     graph.add_node("InputHandler", input_handler)
@@ -82,6 +128,7 @@ def build_graph():
     graph.add_node("CrisisResponder", crisis_responder_node)
     graph.add_node("AppointmentBooking", appointment_booking_node_with_memory)
     graph.add_node("SelfCareNode", self_care_node)
+    graph.add_node("UserInput", user_input_node)
 
     graph.set_entry_point("InputHandler")
     graph.add_edge("InputHandler", "EmotionDetector")
@@ -98,9 +145,24 @@ def build_graph():
         }
     )
     graph.add_edge("CrisisResponder", END)
-    graph.add_edge("AppointmentBooking", END)
+    
+    # Improved appointment booking flow
+    # After AppointmentBooking, always go to UserInput
+    graph.add_edge("AppointmentBooking", "UserInput")
+    
+    # UserInput node routing
+    graph.add_conditional_edges(
+        "UserInput",
+        appointment_flow_condition,
+        {
+            "appointment": "AppointmentBooking",
+            "complete": END
+        }
+    )
+    
     graph.add_edge("SelfCareNode", END)
     return graph.compile()
+
 
 def export_graph_visual(graph_obj, output_path="graph.png"):
     png_graph = graph_obj.get_graph().draw_mermaid_png()
@@ -112,3 +174,24 @@ graph = build_graph()
 if __name__ == "__main__":
     graph = build_graph()
     export_graph_visual(graph)
+
+def update_appointment_booking_node(state):
+    """
+    Updated appointment booking node that properly handles the user input
+    """
+    # Get user input from the state
+    user_input = state.get("user_input", "")
+    appointment_stage = state.get("appointment_stage", "initial")
+    
+    # Create a new state with the user input
+    updated_state = {**state}
+    if user_input:
+        updated_state["current_input"] = user_input
+    
+    # Call the original appointment booking function
+    result = appointment_booking_node(updated_state)
+    
+    # Make sure we clear the user_input after processing
+    result["user_input"] = ""
+    
+    return result
